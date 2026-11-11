@@ -1,0 +1,84 @@
+RaceVision v1.2.0 - TV director and broadcast overlays for NASCAR Racing 2003 Season
+==============================================================================
+
+RaceVision directs the TV view while you watch a race. It reads the race straight from
+NR2003's memory and cuts to the best thing happening: crashes, passes and close battles
+for position, pit stops, the leader, restarts. It picks the camera for each shot, holds
+shots long enough to watch them, and draws broadcast-style graphics over the game: a
+driver tag, a battle box and an in-car dash on on-board cameras.
+
+Please send racevision.log (next to the exe) with any problem report: it records every
+cut RaceVision made and why.
+
+
+WHAT'S NEW IN 1.2.0 (since 1.1.0)
+--------------------------------
+- Lead battle hold: the director holds its view when cars are battling for the lead,
+  so a door-to-door fight for first stays on screen instead of cutting away.
+
+- Configurable accent color: the plate fade color behind driver names (previously
+  fixed teal) is now configurable as dash_accent2. Set it to your team's color or
+  leave it at the default.
+
+- Per-driver dash colors: RaceVision picks each car's dash color from the art folder's
+  colors.json, so each driver's in-car graphics use their own scheme.
+
+- In-car lens and angles apply live: adjustments to camera lens, angle, and position
+  now take effect immediately without reloading.
+
+- Drone near clip fixed: the drone camera no longer clips through the track surface
+  when looking straight down at close range.
+
+- Director view (browser): open :8090/director in a browser while RaceVision is
+  running to see a timeline recorder for the director's cuts, with a track map,
+  car positions, and the cut log updating live. Recordings save to
+  %PROGRAMDATA%\NR2003 Companions\racevision\timelines.
+
+- Series art: team logo, driver headshot and number cards now appear on the track map,
+  car list and director timeline in the desktop window.
+
+- Camera sets: swap whole sets of the game's own track and car cameras from the camsets folder (a menu, or the
+  Cameras drawer in the director view). The first time a file is changed its original is saved, and the
+  "stock" set puts it back. Presets for 14 tracks and a series set are included.
+- Dynamic cameras: RaceVision's own static cameras on the pit lane camera blocks, learned per track.
+- The companion app folder is a setting (companion_folder in racevision.ini). There is no built-in
+  default: set it if you use that app's series art or active series.
+
+WHAT'S NEW IN 1.1.0 (since 1.0)
+---------------------------------
+- Crash replays (auto and manual, up to 3 angles, Replays page, Highlight reel,
+  Ctrl+F7 in-car trigger)
+- Cameras: In-car right, Drone, Side tracking, Low rear, Front quarter, Overhead,
+  Pack view, Rear (rides the car ahead). Phone Adjust edits any camera live.
+- Director leaves your view alone while you drive; qualifying puts you in the cockpit.
+- Two presets: "RaceVision default" and "JT's Customs" (this racevision.ini).
+
+
+GETTING STARTED
+1. Unzip the RaceVision folder anywhere and run RaceVision.exe as administrator.
+2. Start a race in NR2003 (before or after RaceVision, either works).
+3. For the graphics, run NR2003 windowed or borderless.
+
+RaceVision needs nothing but NR2003 1.2.0.1. It works alongside AIMOD and RaceControl.
+
+
+THE WINDOW
+- Live: what's on screen and why, the camera, the race and track, the running order
+  (double-click a car to put it on TV yourself) and the director's log.
+- Director, Battles, Cameras: shot hold times, battle thresholds, camera assignments.
+- Overlays: which graphics show and when. The in-car dash shows on every on-board shot.
+- Art: number cards, headshots and driver colours.
+- Presets: save and switch all settings. Presets are .ini files in the presets folder.
+- Phone: pair a phone to control RaceVision from it.
+
+Keys (work anywhere, also while NR2003 has focus):
+  Ctrl+F9   graphics on / off
+  Ctrl+F10  move the graphics (drag, mouse wheel to resize, Ctrl+F10 again to finish)
+  Ctrl+F11  pause / resume directing
+  Ctrl+F12  quit RaceVision
+
+KNOWN LIMITS
+- Pit Exit High / Low cameras (30, 32 in JT's Customs) were built at Talladega_2023
+  and sit at fixed world positions - pick other cameras for pit exit at other tracks.
+- Director view requires a browser open at :8090/director while RaceVision is running.
+  It does not need an internet connection.

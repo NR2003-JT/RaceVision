@@ -1,0 +1,20 @@
+Cameras tab on first start:
+- A fresh install's ini now has cam_hidden = 9, 22, 24, 25, 26. The tab shows the game's cameras 1–21 in stock order, with RaceVision's Drone (23), Overhead (27) and Pack view (28) added.
+- Hidden are the game's unused camera 9 and RaceVision's other own angles (22 in-car right, 24 side tracking, 25 low rear, 26 front quarter). They still work in the director's lists.
+- I checked this on a clean test copy with no ini.
+- Your own ini is untouched, since this only applies to new installs.
+- The three cameras are named "Dynamic Camera - Flowing: Drone / Overhead / Pack view" in the tab. Say if you want different names.
+
+Cam sets in the release: the app finds a camsets\ folder next to RaceVision.exe. Copy these into the release folder:
+- camsets\presets\ (the 14 track sets and the series set)
+- camsets\README.txt
+- camsets\camsets.py and camsets\Camera sets.cmd (optional; the director view makes the menu unnecessary)
+
+Leave out camsets\stock\ (your original game files, created on first use) and camsets\car_series.txt (your own mod pick). I added car_series.txt to .gitignore. A robocopy line that does this:
+robocopy camsets <release>\camsets /E /XD stock __pycache__ /XF car_series.txt
+
+I also removed your personal tool paths and the reference to your backup zip from camsets\README.txt. Those sentences now say the original is saved in stock\ the first time a file is changed.
+
+For you to handle: the release README, versil describe 1.1.0. The new features aren't inthem yet: playback controls, slow motion, the wipe, overlay hiding, cam sets and dynamic cameras.
+
+For the commit: the four new source files neearlier. camsets/stock/ is already tracked,so decide whether it stays in the repo. Say if you want me to do the commit.

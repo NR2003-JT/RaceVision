@@ -1,0 +1,1629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0c10">
+<link rel="icon" href="/icon.png">
+<title>RaceVision Director</title>
+<!-- RaceVision director view: served by RaceVision itself (racevision_remote.cpp /director), built into the exe.
+     Live camera map (cars, TV camera bands, the camera on air glowing) + a timeline of every cut, from
+     racevision_timeline.cpp (/api/director/*), or a saved recording (%PROGRAMDATA%\NR2003 Companions\racevision\timelines). -->
+<style>
+:root {
+  --bg: #0e1015; --panel: #14171d; --card: #1a1d24; --card2: #22262f; --line: #2a2f39; --input: #0c0e12;
+  --text: #eceff4; --muted: #868fa0; --dim: #5b6372; --gold: #ffc400; --green: #46c878; --red: #eb554b; --teal: #3cc8c8;
+  --cond: "Bahnschrift SemiBold Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr auto; height: 100vh; height: 100dvh; overflow: hidden; }
+button, select, input { font: inherit; color: inherit; }
+button { border: 0; background: none; padding: 0; cursor: pointer; }
+
+header { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: #0b0c10; border-bottom: 1px solid #1e2128; min-width: 0; }
+.mark { font: 700 21px/1 var(--cond); letter-spacing: .5px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.mark img { width: 30px; height: 30px; margin: -4px 0; }
+.mark b { color: var(--gold); font-weight: 700; }
+.mark span { color: var(--muted); font-weight: 600; font-size: 15px; letter-spacing: 1.5px; }
+.chips { display: flex; gap: 6px; align-items: center; min-width: 0; overflow: hidden; }
+.chip { font: 700 12.5px/1 var(--cond); letter-spacing: .8px; text-transform: uppercase; padding: 5px 8px; border-radius: 6px; background: var(--card2); color: #c9ced8; white-space: nowrap; }
+.chip.green { background: #1b3a26; color: #7fe3a5; } .chip.yellow { background: #3d3410; color: #ffd84a; }
+.chip.live { background: #3a1616; color: #ff8a80; display: flex; align-items: center; gap: 6px; }
+.chip.live i { width: 7px; height: 7px; border-radius: 50%; background: #ff5a4f; animation: blink 1.2s infinite; }
+.chip.scrub { background: #16303a; color: #8fe0ff; } .chip.file { background: #2b2140; color: #cfb4ff; }
+@keyframes blink { 50% { opacity: .25; } }
+.hbtns { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.hb { height: 32px; padding: 0 12px; border-radius: 8px; background: var(--card2); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.hb:hover { background: #2b303b; } .hb.on { background: var(--gold); color: #0c0e12; }
+
+main { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+#mapWrap { position: relative; min-width: 0; min-height: 0; }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.mapnote { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--muted); max-width: 420px; padding: 20px; pointer-events: none; }
+.mapnote b { display: block; color: var(--text); font-size: 16px; margin-bottom: 6px; }
+.layers { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 24px); }
+.lay { height: 28px; padding: 0 10px; border-radius: 7px; background: rgba(26,29,36,.88); font-size: 12.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); }
+.lay.on { color: var(--text); border-color: #4a5160; background: rgba(40,45,56,.92); }
+.legend { position: absolute; right: 12px; top: 12px; background: rgba(14,16,21,.82); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.legend div { display: flex; align-items: center; gap: 7px; margin: 2px 0; }
+.legend i { width: 18px; height: 5px; border-radius: 3px; display: inline-block; }
+
+aside { background: var(--panel); border-left: 1px solid #1e2128; display: flex; flex-direction: column; min-height: 0; }
+.onair { padding: 14px; border-bottom: 1px solid var(--line); }
+.lbl { font: 700 11.5px/1 var(--cond); letter-spacing: 1.4px; color: var(--muted); text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+.lbl .r { margin-left: auto; color: var(--dim); letter-spacing: .5px; font-family: system-ui, sans-serif; font-weight: 500; text-transform: none; font-size: 12px; }
+.who { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.num img { max-height: 44px; max-width: 96px; display: block; }
+.head { width: 52px; height: 52px; border-radius: 9px; object-fit: cover; object-position: top; background: var(--card2); display: none; flex: none; }
+.head.show { display: block; }
+.slogo { height: 28px; max-width: 120px; object-fit: contain; display: none; }
+.slogo.show { display: block; }
+.ev .hd img { height: 16px; max-width: 40px; object-fit: contain; flex: none; align-self: center; }
+.num { font: 700 38px/1 var(--cond); min-width: 62px; height: 52px; padding: 0 8px; border-radius: 9px; background: var(--card2); display: flex; align-items: center; justify-content: center; border-left: 4px solid var(--gold); }
+.who .nm { font-weight: 700; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.why { margin-top: 10px; font-size: 13.5px; color: #cfd4dd; min-height: 18px; }
+.cambox { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stat { background: var(--card); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+.stat small { display: block; color: var(--muted); font-size: 11.5px; }
+.stat b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { height: 4px; border-radius: 2px; background: #2a2f39; margin-top: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--teal); width: 0; transition: width .2s linear; }
+.wait { display: none; margin-top: 8px; font-size: 12.5px; color: #ffd84a; }
+.wait.show { display: block; }
+.decisions { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.decisions .lbl { padding: 12px 14px 8px; }
+#evList { overflow-y: auto; flex: 1; padding: 0 8px 10px; }
+.ev { display: grid; grid-template-columns: 54px 1fr; gap: 8px; padding: 7px 6px; border-radius: 8px; cursor: pointer; }
+.ev:hover { background: var(--card); } .ev.sel { background: #1d2a33; }
+.ev .tm { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ev .tm small { display: block; color: var(--dim); }
+.ev .hd { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.ev .hd b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev .hd > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tag { font: 700 10.5px/1 var(--cond); letter-spacing: .8px; padding: 3px 5px; border-radius: 4px; text-transform: uppercase; flex: none; color: #0c0e12; }
+.ev .ds { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.ev .ds em { color: #9fb4c8; font-style: normal; }
+
+#tl { background: var(--panel); border-top: 1px solid #1e2128; }
+.tlbar { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-bottom: 1px solid #1c2027; flex-wrap: wrap; }
+.tlbar .sp { flex: 1; }
+.zb { height: 26px; padding: 0 9px; border-radius: 6px; background: var(--card2); font-size: 12.5px; font-weight: 600; color: #c9ced8; }
+.zb.on { background: #39404d; color: #fff; } .zb.live { background: #3a1616; color: #ff8a80; } .zb.live.on { background: var(--red); color: #fff; }
+.tlinfo { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50vw; }
+#tlc { display: block; width: 100%; height: 190px; cursor: crosshair; touch-action: none; }
+#tip { position: fixed; z-index: 30; pointer-events: none; background: #0b0c10; border: 1px solid #3a404c; border-radius: 9px; padding: 9px 11px; font-size: 12.5px; max-width: 340px; display: none; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+#tip b { color: #fff; } #tip .m { color: var(--muted); } #tip .r { margin-top: 4px; color: #cfd4dd; }
+
+#drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 380px; max-width: 100vw; background: #111318; border-left: 1px solid var(--line); z-index: 40; transform: translateX(100%); transition: transform .2s ease; display: flex; flex-direction: column; }
+#drawer.open { transform: none; box-shadow: -12px 0 32px rgba(0,0,0,.45); }
+.dh { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 16px; }
+.dh button { margin-left: auto; font-size: 22px; line-height: 1; color: var(--muted); width: 32px; height: 32px; border-radius: 8px; }
+.db { overflow-y: auto; padding: 4px 16px 24px; }
+.sec { font: 700 12px/1 var(--cond); letter-spacing: 1.4px; color: var(--gold); text-transform: uppercase; margin: 18px 0 8px; }
+.fld { display: grid; grid-template-columns: 1fr 86px; gap: 4px 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #1c2027; }
+.fld label { font-weight: 600; font-size: 13.5px; }
+.fld small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.fld input[type=number], .fld select { width: 100%; height: 32px; border-radius: 7px; border: 1px solid var(--line); background: var(--input); padding: 0 8px; text-align: right; }
+.fld input.saved { border-color: var(--green); }
+.sw { width: 44px; height: 24px; border-radius: 12px; background: #3a404c; position: relative; justify-self: end; }
+.sw::after { content: ""; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; }
+.sw.on { background: var(--green); } .sw.on::after { left: 23px; }
+.dnote { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+.files { display: flex; flex-direction: column; gap: 4px; }
+.file { text-align: left; padding: 8px 10px; border-radius: 8px; background: var(--card); }
+.file:hover { background: var(--card2); } .file small { display: block; color: var(--muted); }
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #22262f; border: 1px solid #3a404c; padding: 9px 14px; border-radius: 9px; z-index: 50; display: none; }
+
+/* camera sets drawer */
+.setnote { color: var(--muted); font-size: 12.5px; margin: 10px 0; }
+.setnote.warn { color: #ffd84a; } .setnote.good { color: #7fe3a5; }
+.setpick { width: 100%; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--input); padding: 0 8px; margin: 6px 0 2px; }
+.setrow { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; margin: 7px 0; }
+.setrow.now { border-color: #2f7a4d; background: #16241c; } .setrow.next { border-color: #5a4a8a; }
+.setrow .top { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.setrow .top b { font-size: 14.5px; }
+.badge { font: 700 10px/1 var(--cond); letter-spacing: .8px; padding: 3px 6px; border-radius: 4px; text-transform: uppercase; }
+.badge.now { background: #46c878; color: #08140d; } .badge.next { background: #8e6bd8; color: #fff; } .badge.new { background: #3a404c; color: #c9ced8; }
+.setrow .ds { color: var(--muted); font-size: 12.2px; margin-top: 4px; }
+.setrow .cams { color: var(--dim); font-size: 11.8px; margin-top: 3px; }
+.setrow .btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.sb { height: 28px; padding: 0 10px; border-radius: 7px; background: var(--card2); font-size: 12.5px; font-weight: 600; color: #dfe3ea; }
+.sb:hover { background: #2f3541; } .sb.pri { background: var(--gold); color: #0c0e12; } .sb.pri:hover { background: #ffd23a; } .sb:disabled { opacity: .4; cursor: default; }
+.keep { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin: 8px 0 2px; }
+.dynrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid #1c2027; font-size: 12.5px; }
+.dynrow small { color: var(--muted); grid-column: 1 / -1; }
+.meter { height: 5px; border-radius: 3px; background: #2a2f39; overflow: hidden; margin-top: 4px; grid-column: 1 / -1; }
+.meter i { display: block; height: 100%; background: #ff6ec7; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; font-size: 12.5px; margin: 6px 0; } .kv span:nth-child(odd) { color: var(--muted); }
+/* preview bar + prompt on the map */
+.simbar { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center;
+  background: rgba(20,23,29,.94); border: 1px solid #5a4a8a; border-radius: 11px; padding: 7px 9px; z-index: 5; max-width: calc(100% - 24px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.simbar b { font: 700 12.5px var(--cond); letter-spacing: 1px; text-transform: uppercase; color: #cfb4ff; padding: 0 4px; }
+.simbar .zb.on { background: #8e6bd8; color: #fff; }
+.simbar .scn { font-size: 12px; color: var(--muted); padding: 0 4px; max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prompt { position: absolute; left: 12px; right: 12px; top: 10px; background: rgba(20,23,29,.95); border: 1px solid #3a404c; border-radius: 11px; padding: 9px 12px; z-index: 4;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; max-width: 760px; }
+.prompt .x { margin-left: auto; font-size: 20px; line-height: 1; color: var(--muted); width: 26px; height: 26px; }
+.rate { display: none; gap: 6px; margin-top: 8px; align-items: center; font-size: 12.5px; color: var(--muted); } .rate.show { display: flex; }
+.rate button { height: 26px; min-width: 38px; border-radius: 7px; background: var(--card2); font-size: 15px; } .rate button:hover { background: #39404d; }
+.dynlbl { color: #ff6ec7; font-weight: 700; }
+
+@media (max-width: 900px) {
+  body { grid-template-rows: auto auto auto; overflow-y: auto; height: auto; }
+  html, body { width: 100%; overflow-x: hidden; }
+  header { flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
+  .chips { order: 3; flex: 1 1 100%; flex-wrap: wrap; }
+  .hbtns { gap: 6px; }
+  .hb { padding: 0 9px; font-size: 12.5px; }
+  main { grid-template-columns: minmax(0, 1fr); }
+  .tlinfo { display: none; }
+  #mapWrap { height: 62vh; min-height: 320px; }
+  aside { border-left: 0; border-top: 1px solid #1e2128; }
+  #evList { max-height: 300px; }
+  .mark span { display: none; }
+  .chips .chip.opt { display: none; }
+  .legend { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="mark"><img src="/icon.png" alt=""><div>RACE<b>VISION</b> <span>DIRECTOR</span></div></div>
+  <img class="slogo" id="slogo" alt="">
+  <div class="chips" id="chips"></div>
+  <div class="hbtns">
+    <button class="hb" id="btnSets">Camera sets</button>
+    <button class="hb" id="btnDyn">Dynamic cameras</button>
+    <button class="hb" id="btnFiles">Recordings</button>
+    <button class="hb" id="btnSet">Settings</button>
+  </div>
+</header>
+<main>
+  <div id="mapWrap">
+    <canvas id="map"></canvas>
+    <div class="mapnote" id="mapNote"><b>Waiting for NR2003</b>Load a session and RaceVision starts drawing the cameras.</div>
+    <div class="legend" id="legend"></div>
+    <div class="layers" id="layers"></div>
+    <div class="simbar" id="simBar" hidden></div>
+    <div class="prompt" id="setPrompt" hidden></div>
+  </div>
+  <aside>
+    <div class="onair">
+      <div class="lbl" id="oaLbl">On air <span class="r" id="oaAge"></span></div>
+      <div class="who"><img class="head" id="oaHead" alt=""><div class="num" id="oaNum">--</div><div style="min-width:0"><div class="nm" id="oaName">Nobody yet</div><div class="sub" id="oaSub"></div></div></div>
+      <div class="why" id="oaWhy"></div>
+      <div class="cambox">
+        <div class="stat"><small>Camera</small><b id="oaCam">-</b></div>
+        <div class="stat"><small id="oaTvL">TV camera</small><b id="oaTv">-</b><div class="bar"><i id="oaTvBar"></i></div></div>
+      </div>
+      <div class="wait" id="oaWait">Holding the cut: a TV camera is about to change on screen.</div>
+      <div class="rate" id="oaRate"><span class="dynlbl" id="oaDynLbl"></span><span style="flex:1"></span>How is this angle?<button id="rateUp" title="Good angle - use more like it">&#128077;</button><button id="rateDn" title="Poor angle - use less">&#128078;</button></div>
+    </div>
+    <div class="decisions">
+      <div class="lbl">Decisions <span class="r" id="evCount"></span></div>
+      <div id="evList"></div>
+    </div>
+  </aside>
+</main>
+<section id="tl">
+  <div class="tlbar">
+    <button class="zb" data-w="60">1 min</button><button class="zb on" data-w="300">5 min</button><button class="zb" data-w="900">15 min</button><button class="zb" data-w="3600">1 hr</button><button class="zb" data-w="0">All</button>
+    <span class="tlinfo" id="tlInfo">Drag across the timeline to look back - the map follows. Wheel to zoom.</span>
+    <span class="sp"></span>
+    <button class="zb live on" id="btnLive">LIVE</button>
+  </div>
+  <canvas id="tlc"></canvas>
+</section>
+<div id="tip"></div>
+<div id="drawer"><div class="dh"><span id="dTitle">Director settings</span><button id="dClose">&times;</button></div><div class="db" id="dBody"></div></div>
+<div id="toast"></div>
+<script>
+"use strict";
+// ---------------------------------------------------------------- setup
+const qs = new URLSearchParams(location.search);
+let KEY = qs.get("k") || "";
+try { if (KEY) localStorage.setItem("rv_k", KEY); else KEY = localStorage.getItem("rv_k") || ""; } catch (e) {}
+const $ = id => document.getElementById(id);
+let lrn = null;           // what RaceVision has learnt about this track (/api/dyn)
+const opt = Object.assign({ bands: "active", labels: "onair", art: true, spots: true, beam: true, glow: true, smooth: "normal", learned: false },
+  (() => { try { return JSON.parse(localStorage.getItem("rvDirOpt") || "{}"); } catch (e) { return {}; } })());
+const saveOpt = () => { try { localStorage.setItem("rvDirOpt", JSON.stringify(opt)); } catch (e) {} };
+
+async function api(path, args = {}) {
+  const u = new URLSearchParams(Object.assign({ k: KEY }, args));
+  const r = await fetch("/api/" + path + "?" + u, { cache: "no-store" });
+  const t = await r.text();
+  if (!r.ok) { let m = t; try { m = JSON.parse(t).error || t; } catch (e) {} throw new Error(m); }
+  return t;
+}
+const apiJ = async (p, a) => JSON.parse(await api(p, a));
+async function apiPost(path, args = {}) {
+  const u = new URLSearchParams(Object.assign({ k: KEY }, args));
+  const r = await fetch("/api/" + path + "?" + u, { method: "POST", cache: "no-store" });
+  const t = await r.text();
+  let j = null; try { j = JSON.parse(t); } catch (e) {}
+  if (!r.ok && !(j && j.live)) { throw new Error((j && j.error) || t); }
+  return j || {};
+}
+function toast(s) { const t = $("toast"); t.textContent = s; t.style.display = "block"; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", 2600); }
+
+// ---- the selected art folder (RaceVision's Art page): number cards, headshots, series logo; colours come with the cars
+let SERIES = "", HASLOGO = false;
+const artUrl = (kind, n) => `/art/${kind}/${n}.png?k=${encodeURIComponent(KEY)}&s=${encodeURIComponent(SERIES)}`;
+const artCache = {};
+function art(kind, n) {            // a loaded Image, or null (not there / still loading / art off)
+  if (!opt.art || !SERIES || n == null || !/^\d{1,4}$/.test(String(n))) return null;
+  const k = kind + ":" + n + ":" + SERIES;
+  let im = artCache[k];
+  if (im === undefined) {
+    im = new Image(); im.ok = false;
+    im.onload = () => { im.ok = im.naturalWidth > 0; artChanged(); };
+    im.onerror = () => { artCache[k] = false; };
+    im.src = artUrl(kind, n); artCache[k] = im;
+  }
+  return im && im.ok ? im : null;
+}
+function artChanged() { clearTimeout(artChanged.h); artChanged.h = setTimeout(() => { renderEvents(); renderOnAir.last = ""; renderOnAirFile.k = ""; }, 150); }
+function setSeries(name, logo) {
+  if (name === SERIES && logo === HASLOGO) return;
+  SERIES = name || ""; HASLOGO = !!logo;
+  const l = $("slogo"), show = opt.art && SERIES && HASLOGO;
+  l.classList.toggle("show", !!show); if (show) l.src = artUrl("logo", "0");
+  artChanged();
+}
+// number card (or the number as text) / headshot for the ON AIR panel
+function setWho(num, kindCol) {
+  const box = $("oaNum"), im = art("num", num), key = (im ? "img:" : "txt:") + num;
+  if (box.dataset.k !== key) { box.dataset.k = key; box.innerHTML = im ? '<img src="' + im.src + '" alt="">' : esc(num == null ? "--" : num); }
+  box.style.borderLeftColor = kindCol;
+  const hd = $("oaHead"), h = num != null ? art("head", num) : null;
+  hd.classList.toggle("show", !!h); if (h && hd.src !== h.src) hd.src = h.src;
+}
+
+// colours
+const KIND_COL = { TOUR: "#868fa0", RUNNING: "#868fa0", LEADER: "#ffc400", PIT: "#b07cff", BATTLE: "#ff7a45", PASS: "#ff4d8d", RESTART: "#46c878", INCIDENT: "#eb554b", MANUAL: "#3cc8c8", REPLAY: "#eb554b" };
+const BAND_COL = ["#ff8c1e", "#3caaff", "#78dc5a", "#f050a0", "#fadc3c", "#aa78ff"];
+const GROUP_NAME = ["TV1", "TV2", "Spectator"];
+function famOf(base) {
+  if (base >= 19 && base <= 21) return { k: "tv", n: "TV", c: "#3c9cff" };
+  if (base === 16) return { k: "heli", n: "Helicopter / drone", c: "#3cc8c8" };
+  if (base === 17 || base === 18) return { k: "pit", n: "Pit road", c: "#b07cff" };
+  if ([1, 2, 3, 10, 12, 13, 14, 15].includes(base)) return { k: "onboard", n: "On-board", c: "#46c878" };
+  if (base === 11) return { k: "rear", n: "Rear", c: "#ffcc3c" };
+  if (base >= 4 && base <= 8) return { k: "chase", n: "Chase", c: "#ff9a3c" };
+  return { k: "other", n: "Other", c: "#868fa0" };
+}
+const DYN_FAM = { k: "dyn", n: "Dynamic camera", c: "#ff6ec7" };
+const famE = e => e && e.dyn ? DYN_FAM : famOf(e ? e.base : -1);       // an event's camera family (a dynamic camera is its own)
+const SRC_TAG = { cut: ["CUT", "#ffc400"], camera: ["CAM", "#3c9cff"], tv: ["TV", "#5a6a84"], picked: ["PICK", "#3cc8c8"], qualifying: ["QUAL", "#78dc5a"],
+  replay: ["REPLAY", "#eb554b"], drive: ["YOU", "#3cc8c8"], setting: ["SET", "#aa78ff"], start: ["START", "#868fa0"] };
+const flagCol = (f, race) => !race ? "#3a404c" : f === 7 ? "#2fa860" : f === 5 ? "#e0e0e0" : "#e6c02a";
+function fmtT(s) { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = Math.floor(s % 60); return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); }
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------------------------------------------------------------- state
+const st = {
+  mode: "live",          // live | file
+  sid: -1, map: null, cars: {}, events: [], flags: [], laps: [], samples: [],   // samples: file mode only
+  live: null, liveA: null, liveB: null, tA: 0, tB: 0,
+  scrubT: null,          // game s being looked at (null = now)
+  win: 300, pan: 0,      // timeline: window length (0 = all), how far back the right edge is (s)
+  at: null, atT: null,   // the sample shown while scrubbing
+  file: "", fileHdr: null, sessionRace: true, selEv: -1,
+};
+
+// ---------------------------------------------------------------- data: live
+async function pollLive() {
+  for (;;) {
+    if (st.mode === "live") {
+      try {
+        const L = await apiJ("director/live");
+        if (st.mode !== "live") continue;
+        if (L.sid !== st.sid) await resetSession(L.sid);
+        st.liveA = st.liveB; st.tA = st.tB; st.liveB = L; st.tB = performance.now(); st.live = L;
+        st.sessionRace = L.session === "race";
+        setSeries(L.series, L.logo);
+        renderOnAir();
+      } catch (e) { st.live = null; noteErr(e); }
+    }
+    await sleep(100);
+  }
+}
+async function pollEvents() {
+  for (;;) {
+    if (st.mode === "live" && st.sid >= 0) {
+      try {
+        const E = await apiJ("director/events", { from: st.events.length });
+        if (E.sid !== st.sid) await resetSession(E.sid);
+        else if (E.from === st.events.length && E.events.length) { st.events.push(...E.events); renderEvents(); }
+        st.flags = E.flags || []; st.laps = E.laps || [];
+      } catch (e) {}
+    }
+    await sleep(1000);
+  }
+}
+async function pollMap() {
+  for (;;) { if (st.mode === "live") { try { await loadMap(); } catch (e) {} } await sleep(10000); }
+}
+async function loadMap() {
+  const M = await apiJ("director/map");
+  st.map = M.map; st.cars = {};
+  for (const c of M.cars || []) st.cars[c[0]] = { num: c[1], name: c[2], color: c[3] };
+  prepMap();
+}
+async function resetSession(sid) {
+  if (st.mode !== "live") return;
+  st.sid = sid; st.events = []; st.flags = []; st.laps = []; st.scrubT = null; st.at = null; st.selEv = -1;
+  await loadMap().catch(() => {});
+  renderEvents();
+  promptSets();
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function noteErr(e) {
+  const n = $("mapNote");
+  n.style.display = "block";
+  n.innerHTML = /paired/i.test(e.message) ? "<b>Not paired</b>Open this page from RaceVision (Director page > Open director view) or from the phone page, so it carries the pairing code."
+                                          : "<b>RaceVision isn't answering</b>" + esc(e.message || "Is RaceVision running?");
+}
+
+// ---------------------------------------------------------------- data: a saved recording
+async function openFile(name) {
+  let txt;
+  try { txt = await api("director/file", { name }); } catch (e) { toast(e.message); return; }
+  const f = { events: [], samples: [], flags: [], laps: [], cars: {}, map: null, hdr: null };
+  for (const line of txt.split("\n")) {
+    if (!line.trim()) continue;
+    let o; try { o = JSON.parse(line); } catch (e) { continue; }
+    if (o.h) f.hdr = o.h; else if (o.m) f.map = o.m; else if (o.e) f.events.push(o.e); else if (o.p) f.samples.push(o.p);
+    else if (o.f) f.flags.push(o.f); else if (o.l) f.laps.push(o.l);
+    else if (o.c) for (const c of o.c) f.cars[c[0]] = { num: c[1], name: c[2], color: c[3] };
+  }
+  Object.assign(st, { mode: "file", file: name, fileHdr: f.hdr, events: f.events, samples: f.samples, flags: f.flags, laps: f.laps, cars: f.cars, map: f.map,
+                      sessionRace: !f.hdr || f.hdr.session === "race", win: 0, pan: 0, selEv: -1 });
+  st.scrubT = f.samples.length ? f.samples[0].t : f.events.length ? f.events[0].t : 0;
+  st.at = sampleAt(st.scrubT);
+  prepMap(); renderEvents(); setZoomButtons(); closeDrawer();
+  toast("Opened " + name);
+}
+function backToLive() {
+  if (st.sim) simExit(true);
+  if (st.mode === "file") { st.mode = "live"; st.sid = -1; st.events = []; st.samples = []; st.file = ""; st.win = 300; setZoomButtons(); }
+  st.scrubT = null; st.at = null; st.pan = 0; st.selEv = -1;
+  renderEvents();
+}
+function sampleAt(t) {
+  const s = st.samples; if (!s.length) return null;
+  let lo = 0, hi = s.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (s[m].t < t) lo = m + 1; else hi = m; }
+  if (lo > 0 && Math.abs(s[lo - 1].t - t) < Math.abs(s[lo].t - t)) lo--;
+  return s[lo];
+}
+let atBusy = false, atWant = null;
+async function fetchAt(t) {
+  if (st.mode === "file") { st.at = sampleAt(t); return; }
+  atWant = t; if (atBusy) return;
+  atBusy = true;
+  while (atWant != null) { const w = atWant; atWant = null; try { st.at = await apiJ("director/at", { t: w.toFixed(2) }); } catch (e) {} }
+  atBusy = false;
+}
+
+// ---------------------------------------------------------------- map geometry
+// Smoothing: a quadratic fitted through the points within +-m metres (Savitzky-Golay, what RaceControl does with 12 m),
+// wider here - the map is a picture, and a map learnt from cars in different lanes wobbles. Strong = two wider passes.
+function smoothPts(src, len, level) {
+  const passes = level === "off" ? [] : level === "strong" ? [45, 45] : [28];
+  let p = Float32Array.from(src);
+  const n = p.length / 2, sp = len / n;
+  for (const m of passes) {
+    const h = Math.max(2, Math.min(120, Math.round(m / sp))), norm = (2 * h + 1) * (4 * h * h + 4 * h - 3), w = [];
+    for (let j = -h; j <= h; j++) w.push((3 * (3 * h * h + 3 * h - 1) - 15 * j * j) / norm);
+    const q = new Float32Array(p.length);
+    for (let i = 0; i < n; i++) {
+      let sx = 0, sy = 0;
+      for (let j = -h; j <= h; j++) { const k = ((i + j) % n + n) % n; sx += w[j + h] * p[2 * k]; sy += w[j + h] * p[2 * k + 1]; }
+      q[2 * i] = sx; q[2 * i + 1] = sy;
+    }
+    p = q;
+  }
+  return p;
+}
+let geo = null;        // prepared map: normals, band polylines (world)
+function prepMap() {
+  const M = st.map;
+  $("mapNote").style.display = M ? "none" : "block";
+  if (!M) {
+    $("mapNote").innerHTML = st.mode === "file" ? "<b>No track map in this recording</b>The timeline still shows every decision."
+      : "<b>No track map yet</b>RaceVision learns the track from the cars in the first lap or two (or uses Race Control's map when it has drawn one).";
+    geo = null; return;
+  }
+  geo = buildGeo(M);
+}
+function buildGeo(M) {            // the prepared map for any map object (the live one, a recording's, a preview's)
+  const p = smoothPts(M.pts, M.len, opt.smooth), n = p.length / 2, X = i => p[2 * ((i % n + n) % n)], Y = i => p[2 * ((i % n + n) % n) + 1];
+  const nx = new Float32Array(n), ny = new Float32Array(n), kn = Math.max(3, Math.round(10 / (M.len / n)));   // direction over ~20 m
+  for (let i = 0; i < n; i++) {
+    let tx = X(i + kn) - X(i - kn), ty = Y(i + kn) - Y(i - kn); const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    nx[i] = -ty; ny[i] = tx;       // left of travel
+  }
+  const at = (d, lat) => {
+    const f = ((d % M.len) + M.len) % M.len / M.len * n, i = Math.floor(f) % n, j = (i + 1) % n, t = f - Math.floor(f);
+    const x = X(i) + (X(j) - X(i)) * t, y = Y(i) + (Y(j) - Y(i)) * t, ax = nx[i] + (nx[j] - nx[i]) * t, ay = ny[i] + (ny[j] - ny[i]) * t;
+    return [x + ax * lat, y + ay * lat];
+  };
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (let i = 0; i < n; i++) { minX = Math.min(minX, X(i)); maxX = Math.max(maxX, X(i)); minY = Math.min(minY, Y(i)); maxY = Math.max(maxY, Y(i)); }
+  const bx = (maxX - minX) * .2 + 40, by = (maxY - minY) * .2 + 40, box = [minX, maxX, minY, maxY];
+  for (const g of M.tv || []) for (const c of g) {
+    box[0] = Math.min(box[0], Math.max(minX - bx, c.x)); box[1] = Math.max(box[1], Math.min(maxX + bx, c.x));
+    box[2] = Math.min(box[2], Math.max(minY - by, c.y)); box[3] = Math.max(box[3], Math.min(maxY + by, c.y));
+  }
+  return { n, X, Y, at, box, len: M.len, lapScale: M.lap > 0 ? M.len / M.lap : 1 };
+}
+
+// ---------------------------------------------------------------- what is on screen at time t (from the events)
+function evIndexAt(t) {
+  const e = st.events; let lo = 0, hi = e.length - 1, r = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (e[m].t <= t) { r = m; lo = m + 1; } else hi = m - 1; }
+  return r;
+}
+function shotAt(t) {
+  const i = evIndexAt(t); if (i < 0) return null;
+  const e = st.events[i];
+  // the last cut (car change) before it: its reason is the shot's
+  let j = i; while (j > 0 && st.events[j].src !== "cut" && st.events[j].car === e.car && st.events[j - 1].car === e.car) j--;
+  return { e, cut: st.events[j], i };
+}
+
+// ---------------------------------------------------------------- map drawing
+const cv = $("map"), cx = cv.getContext("2d");
+function fitCanvas(c) {
+  const r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return { w: r.width, h: r.height, d };
+}
+let view = null;   // world -> screen
+function drawMap(now) {
+  const { w, h, d } = fitCanvas(cv);
+  cx.setTransform(d, 0, 0, d, 0, 0);
+  cx.clearRect(0, 0, w, h);
+  // background
+  const bg = cx.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, Math.max(w, h) * .7);
+  bg.addColorStop(0, "#151922"); bg.addColorStop(1, "#0b0d11");
+  cx.fillStyle = bg; cx.fillRect(0, 0, w, h);
+  if (!geo) { view = null; return; }
+  const [x0, x1, y0, y1] = geo.box, pad = 46, top = st.sim ? 100 : 0;          // (a preview's control bar takes the top)
+  const s = Math.min((w - 2 * pad) / Math.max(1, x1 - x0), (h - 2 * pad - 20 - top) / Math.max(1, y1 - y0));
+  const ox = (w - (x1 - x0) * s) / 2 - x0 * s, oy = (h + top - (y1 - y0) * s) / 2 + y1 * s - 10;
+  const P = (x, y) => [ox + x * s, oy - y * s];
+  view = { P, s, inv: (sx, sy) => [(sx - ox) / s, (oy - sy) / s] };
+  const tw = Math.max(6, Math.min(20, 14 * s));
+
+  // the picture's state: live, or the moment being scrubbed
+  const scrub = st.scrubT != null;
+  let onCar = -1, onCam = -1, onBase = -1, onTg = -1, onTk = -1, other = -1, kind = "", replay = false, dynPose = null;
+  if (!scrub && st.live) {
+    const L = st.live; onCar = L.car; onCam = L.cam; onBase = L.base; onTg = L.tg; onTk = L.tk; other = L.other; kind = L.kind; replay = L.replay;
+    dynPose = L.dyn && L.dyn.on ? L.dyn : null;
+  } else if (scrub) {
+    const sh = shotAt(st.scrubT);
+    if (sh) {
+      const e = sh.e; onCar = e.car; onCam = e.cam; onBase = e.base; onTg = e.tg; other = e.other; kind = e.src === "replay" ? "REPLAY" : e.kind; replay = e.src === "replay";
+      dynPose = e.dyn || null;
+      if (onTg >= 0 && st.map && st.map.tv[onTg]) onTk = st.map.tv[onTg].findIndex(c => c.n === e.tn);
+    }
+  }
+  const pulse = opt.glow ? .5 + .5 * Math.sin(now / 260) : .6;
+
+  // track
+  cx.lineJoin = "round"; cx.lineCap = "round";
+  const path = new Path2D();
+  for (let i = 0; i <= geo.n; i++) { const [a, b] = P(geo.X(i), geo.Y(i)); i ? path.lineTo(a, b) : path.moveTo(a, b); }
+  cx.strokeStyle = "#07080a"; cx.lineWidth = tw + 5; cx.stroke(path);
+  cx.strokeStyle = "#3b4049"; cx.lineWidth = tw; cx.stroke(path);
+  cx.strokeStyle = "rgba(255,255,255,.05)"; cx.lineWidth = 1; cx.stroke(path);
+
+  // TV camera bands: TV1 outermost, TV2, spectator (right of travel = outside on an oval)
+  const groups = opt.bands === "all" ? [0, 1, 2] : opt.bands === "none" ? [] : [onTg >= 0 ? onTg : 0];
+  const tv = st.map.tv || [];
+  for (const k of groups) {
+    const g = tv[k] || [];
+    const lat = -(tw / 2 + 7 + (opt.bands === "all" ? k * 10 : 0)) / s;
+    g.forEach((c, i) => {
+      let a = c.from, span = ((c.to - c.from) % geo.len + geo.len) % geo.len; if (span < 1) span = geo.len;
+      const live = k === onTg && i === onTk;
+      const bp = new Path2D(), step = Math.max(2, span / 160);
+      for (let dd = 0, first = true; dd <= span + .01; dd += step, first = false) { const [px, py] = P(...geo.at(a + Math.min(dd, span), lat)); first ? bp.moveTo(px, py) : bp.lineTo(px, py); }
+      const col = BAND_COL[i % 6];
+      cx.lineCap = "butt";
+      if (live) {
+        cx.save();
+        cx.shadowColor = col; cx.shadowBlur = 14 + 16 * pulse;
+        cx.strokeStyle = col; cx.lineWidth = 9 + 2 * pulse; cx.stroke(bp);
+        cx.shadowBlur = 0; cx.strokeStyle = "rgba(255,255,255,.55)"; cx.lineWidth = 2; cx.stroke(bp);
+        cx.restore();
+      } else {
+        cx.globalAlpha = onTg === k ? .42 : .3; cx.strokeStyle = col; cx.lineWidth = 6; cx.stroke(bp); cx.globalAlpha = 1;
+      }
+      // the camera itself
+      const [qx, qy] = P(c.x, c.y), [fx, fy] = P(...geo.at(a, lat));
+      cx.strokeStyle = live ? col : "rgba(255,255,255,.08)"; cx.lineWidth = 1; cx.globalAlpha = live ? .7 : 1;
+      cx.beginPath(); cx.moveTo(qx, qy); cx.lineTo(fx, fy); cx.stroke(); cx.globalAlpha = 1;
+      cx.fillStyle = col; cx.globalAlpha = live ? 1 : .75;
+      if (live) { cx.save(); cx.shadowColor = col; cx.shadowBlur = 18; }
+      const r = live ? 7 : 4.5;
+      if (c.fixed) cx.fillRect(qx - r, qy - r, 2 * r, 2 * r); else { cx.beginPath(); cx.arc(qx, qy, r, 0, 7); cx.fill(); }
+      if (live) cx.restore();
+      cx.globalAlpha = 1;
+      if (live || opt.bands === "all" || groups.length === 1) {
+        cx.font = (live ? "700 13px " : "600 10.5px ") + "system-ui, sans-serif";
+        cx.fillStyle = live ? "#fff" : "rgba(220,225,235,.55)";
+        cx.fillText((k === 0 ? "TV1-" : k === 1 ? "TV2-" : "S-") + c.n, qx + 8, qy - 7);
+      }
+    });
+  }
+  // start / finish
+  { const [ax, ay] = P(...geo.at(0, tw / 2 / s + 3 / s)), [bx, by] = P(...geo.at(0, -(tw / 2 + 6) / s));
+    cx.strokeStyle = "#fff"; cx.lineWidth = 3; cx.lineCap = "butt"; cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(bx, by); cx.stroke();
+    cx.fillStyle = "rgba(255,255,255,.7)"; cx.font = "700 10.5px system-ui"; cx.fillText("S/F", bx + 5, by + 4); }
+  // pit cameras
+  for (const pc of st.map.pit || []) {
+    const [qx, qy] = P(pc.x, pc.y), live = onBase === pc.cam;
+    cx.save(); if (live) { cx.shadowColor = "#b07cff"; cx.shadowBlur = 16 + 10 * pulse; }
+    cx.fillStyle = live ? "#b07cff" : "rgba(176,124,255,.55)"; cx.fillRect(qx - 4, qy - 4, 8, 8); cx.restore();
+    cx.fillStyle = "rgba(220,225,235,.55)"; cx.font = "600 10.5px system-ui"; cx.fillText(pc.cam === 17 ? "Pit 1" : "Pit 2", qx + 7, qy + 4);
+  }
+  // where the director cut, over the timeline's window
+  if (opt.spots) {
+    const [ta, tb] = tlRange();
+    for (const e of st.events) {
+      if (e.src !== "cut" || e.t < ta || e.t > tb || !(e.d >= 0)) continue;
+      const [qx, qy] = P(...geo.at(e.d * geo.lapScale, (tw / 2 + 6) / s));
+      cx.fillStyle = KIND_COL[e.kind] || "#888"; cx.globalAlpha = .9;
+      cx.beginPath(); cx.moveTo(qx, qy - 5); cx.lineTo(qx + 4, qy); cx.lineTo(qx, qy + 5); cx.lineTo(qx - 4, qy); cx.fill(); cx.globalAlpha = 1;
+    }
+  }
+
+  // the cars
+  const cars = carsNow(now);
+  const pos = {};
+  for (const c of cars) pos[c.slot] = P(c.x, c.y);
+  // beam: from the TV / pit camera to the car on air
+  // the camera on air: a beam to the car and its lens as a wedge. A dynamic camera (RaceVision placed it) has no band, so it is drawn here.
+  {
+    let cam3 = null;
+    if (dynPose) cam3 = { x: dynPose.x, y: dynPose.y, col: DYN_FAM.c, fov: dynPose.fov, dyn: true };
+    else if (onTg >= 0 && onTk >= 0 && tv[onTg] && tv[onTg][onTk]) { const c = tv[onTg][onTk]; cam3 = { x: c.x, y: c.y, col: BAND_COL[onTk % 6], fov: c.z || 6 }; }
+    else for (const pc of st.map.pit || []) if (pc.cam === onBase) cam3 = { x: pc.x, y: pc.y, col: "#b07cff", fov: 0 };
+    if (cam3 && (cam3.dyn || opt.beam)) {
+      const from = P(cam3.x, cam3.y);
+      if (onCar >= 0 && pos[onCar]) {
+        const [tx, ty] = pos[onCar], gr = cx.createLinearGradient(from[0], from[1], tx, ty), dd = Math.hypot(tx - from[0], ty - from[1]);
+        if (cam3.fov > 0 && dd > 6) {                                    // the lens
+          const ang = Math.atan2(ty - from[1], tx - from[0]), half = Math.max(cam3.fov / 2, 2.5) * Math.PI / 180, len = dd * 1.14;
+          cx.save(); cx.globalAlpha = .13 + .07 * pulse; cx.fillStyle = cam3.col; cx.beginPath(); cx.moveTo(from[0], from[1]);
+          cx.lineTo(from[0] + len * Math.cos(ang - half), from[1] + len * Math.sin(ang - half)); cx.lineTo(from[0] + len * Math.cos(ang + half), from[1] + len * Math.sin(ang + half)); cx.closePath(); cx.fill();
+          cx.globalAlpha = .45; cx.strokeStyle = cam3.col; cx.lineWidth = 1; cx.stroke(); cx.restore();
+        }
+        gr.addColorStop(0, cam3.col); gr.addColorStop(1, "rgba(255,255,255,.05)");
+        cx.save(); cx.globalAlpha = .55 + .3 * pulse; cx.strokeStyle = gr; cx.lineWidth = 2; cx.setLineDash([6, 5]);
+        cx.beginPath(); cx.moveTo(from[0], from[1]); cx.lineTo(tx, ty); cx.stroke(); cx.restore();
+      }
+      if (cam3.dyn) {                                                     // the camera itself, and what it is
+        cx.save(); cx.translate(from[0], from[1]); cx.shadowColor = cam3.col; cx.shadowBlur = 14 + 10 * pulse;
+        cx.fillStyle = cam3.col; cx.beginPath(); cx.moveTo(0, -9); cx.lineTo(8, 0); cx.lineTo(0, 9); cx.lineTo(-8, 0); cx.closePath(); cx.fill(); cx.restore();
+        cx.fillStyle = "#fff"; cx.font = "700 12px system-ui"; cx.fillText(dynLabelNow() || "Dynamic camera", from[0] + 12, from[1] - 8);
+      }
+    }
+  }
+  if (opt.learned && lrn) drawLearned(P, s, tw);
+  const R = Math.max(4, Math.min(8, tw * .42));
+  const order = cars.slice().sort((a, b) => (a.slot === onCar) - (b.slot === onCar) || (a.slot === other) - (b.slot === other));
+  for (const c of order) {
+    const [qx, qy] = pos[c.slot], info = st.cars[c.slot] || {}, on = c.slot === onCar, par = c.slot === other;
+    let fill = opt.art && info.color ? info.color : "#d8dde6";
+    cx.globalAlpha = c.pit && !on ? .45 : 1;
+    if (on) {
+      cx.save(); cx.shadowColor = "#ffc400"; cx.shadowBlur = 16 + 12 * pulse;
+      cx.strokeStyle = "#ffc400"; cx.lineWidth = 3; cx.beginPath(); cx.arc(qx, qy, R + 5 + 1.5 * pulse, 0, 7); cx.stroke(); cx.restore();
+    } else if (par) { cx.strokeStyle = "#ff7a45"; cx.lineWidth = 2; cx.beginPath(); cx.arc(qx, qy, R + 4, 0, 7); cx.stroke(); }
+    cx.fillStyle = "#07080a"; cx.beginPath(); cx.arc(qx, qy, R + 1.5, 0, 7); cx.fill();
+    cx.fillStyle = fill; cx.beginPath(); cx.arc(qx, qy, R, 0, 7); cx.fill();
+    cx.globalAlpha = 1;
+    const showLab = opt.labels === "all" || ((opt.labels === "onair") && (on || par));
+    const card = showLab && info.num != null ? art("num", info.num) : null;
+    if (card) {
+      const hh = on ? 22 : 16, ww = Math.min(hh * 2.6, card.naturalWidth / card.naturalHeight * hh);
+      cx.fillStyle = "rgba(7,8,10,.82)"; roundRect(cx, qx + R + 4, qy - hh / 2 - 3, ww + 8, hh + 6, 4); cx.fill();
+      if (on) { cx.strokeStyle = "#ffc400"; cx.lineWidth = 1.5; cx.stroke(); }
+      cx.drawImage(card, qx + R + 8, qy - hh / 2, ww, hh);
+    } else if (showLab && info.num != null) {
+      cx.font = (on ? "800 14px " : "700 11.5px ") + "system-ui, sans-serif";
+      const txt = "#" + info.num, tw2 = cx.measureText(txt).width;
+      cx.fillStyle = "rgba(7,8,10,.78)"; cx.fillRect(qx + R + 4, qy - 9, tw2 + 8, 18);
+      cx.fillStyle = on ? "#ffc400" : par ? "#ffb08a" : "#e6e9ef"; cx.fillText(txt, qx + R + 8, qy + 5);
+    }
+  }
+  // the camera riding on the car (not a TV / pit camera): a tag beside the car on air
+  if (onCar >= 0 && pos[onCar] && !(onTg >= 0) && onBase !== 17 && onBase !== 18 && !dynPose) {
+    const f = famOf(onBase), [qx, qy] = pos[onCar], name = replay ? "REPLAY" : (camName(onCam) || f.n);
+    cx.font = "700 12px system-ui"; const wd = cx.measureText(name).width + 14;
+    cx.save(); cx.shadowColor = f.c; cx.shadowBlur = 10 * pulse + 4;
+    cx.fillStyle = replay ? "#eb554b" : f.c; roundRect(cx, qx - wd / 2, qy - R - 30, wd, 19, 5); cx.fill(); cx.restore();
+    cx.fillStyle = "#0c0e12"; cx.fillText(name, qx - wd / 2 + 7, qy - R - 16.5);
+  }
+  if (scrub) {
+    cx.fillStyle = "rgba(143,224,255,.85)"; cx.font = "700 13px system-ui";
+    cx.fillText((st.sim ? "PREVIEW  " : st.mode === "file" ? "RECORDING  " : "LOOKING BACK  ") + fmtT(st.scrubT - tl0()), 14, h - 52);
+  }
+}
+function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function camName(cam) { const e = st.events.slice().reverse().find(x => x.cam === cam && x.camName); return e ? e.camName : (st.live && st.live.cam === cam ? st.live.camName : ""); }
+
+// live dots, eased between the last two polls (100 ms behind, so they glide)
+function carsNow(now) {
+  if (st.scrubT != null && st.sim) return simCars(st.scrubT);       // a preview: positions every 0.1 s, eased between
+  if (st.scrubT != null) {
+    const a = st.at; if (!a) return [];
+    const out = []; for (let i = 0; i < a.p.length; i += 3) out.push({ slot: a.p[i], x: a.p[i + 1], y: a.p[i + 2], pit: false });
+    return out;
+  }
+  const B = st.liveB; if (!B) return [];
+  const A = st.liveA;
+  let f = 1;
+  if (A && st.tB > st.tA) f = Math.min(1.25, Math.max(0, (now - 100 - st.tA) / (st.tB - st.tA)));
+  const prev = {}; if (A) for (const c of A.cars) prev[c[0]] = c;
+  return B.cars.map(c => {
+    const p = prev[c[0]];
+    const ok = p && Math.hypot(c[1] - p[1], c[2] - p[2]) < 60;
+    return { slot: c[0], x: ok ? p[1] + (c[1] - p[1]) * f : c[1], y: ok ? p[2] + (c[2] - p[2]) * f : c[2], pit: !!c[3], pos: c[4] };
+  });
+}
+
+// click a car on the map: put it on air (live)
+cv.addEventListener("click", async ev => {
+  if (!view || st.scrubT != null || st.mode !== "live") return;
+  const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  let best = -1, bd = 22;
+  for (const c of carsNow(performance.now())) { const [qx, qy] = view.P(c.x, c.y), dd = Math.hypot(qx - mx, qy - my); if (dd < bd) { bd = dd; best = c.slot; } }
+  if (best < 0) return;
+  try { await api("focus", { slot: best }); const i = st.cars[best]; toast("On air: #" + (i ? i.num + " " + i.name : best) + " (the director waits a while)"); } catch (e) { toast(e.message); }
+});
+
+// ---------------------------------------------------------------- on air panel
+function renderOnAir() {
+  const L = st.live; if (!L) return;
+  renderChips();
+  const scrub = st.scrubT != null;
+  let car, cam, why, kind, tgTxt = "-", age = "", base, tv = 0;
+  if (scrub) {
+    const sh = shotAt(st.scrubT);
+    if (!sh) return;
+    const e = sh.e; car = e.car; cam = e.camName || "-"; why = sh.cut.why; kind = e.src === "replay" ? "REPLAY" : e.kind; base = e.base;
+    tgTxt = e.tg >= 0 ? GROUP_NAME[e.tg] + " camera " + e.tn : "-";
+    age = "at " + fmtT(st.scrubT - tl0()) + (e.lap ? " · lap " + e.lap : "");
+    $("oaLbl").firstChild.textContent = "On air then ";
+  } else {
+    car = L.car; cam = L.camName || "-"; why = L.why; kind = L.kind; base = L.base;
+    tgTxt = L.tg >= 0 ? GROUP_NAME[L.tg] + " camera " + L.tn : "-";
+    age = L.car >= 0 ? "shot " + Math.round(L.age) + " s" : "";
+    if (L.tg >= 0 && L.tvNext >= 0) tv = Math.max(0, Math.min(1, L.tvSince / Math.max(.1, L.tvSince + L.tvNext)));
+    $("oaLbl").firstChild.textContent = L.replay ? "Replay " : L.drive ? "You're driving " : "On air ";
+  }
+  const info = st.cars[car] || {};
+  setWho(car >= 0 && info.num != null ? info.num : null, KIND_COL[kind] || "#ffc400");
+  $("oaName").textContent = car >= 0 ? (info.name || "Car " + car) : "Nobody yet";
+  $("oaSub").innerHTML = car >= 0 ? '<span class="tag" style="background:' + (KIND_COL[kind] || "#888") + '">' + esc(kind) + "</span>" +
+    (!scrub && L.cars ? (() => { const c = L.cars.find(x => x[0] === car); return c ? " &nbsp;P" + c[4] : ""; })() : "") : "";
+  $("oaWhy").textContent = why || "";
+  $("oaCam").textContent = cam; $("oaCam").style.color = (scrub ? famE((shotAt(st.scrubT) || {}).e) : (L.dyn ? DYN_FAM : famOf(base))).c;
+  $("oaTv").textContent = tgTxt;
+  $("oaTvL").textContent = !scrub && L.tg >= 0 && L.tvNext >= 0 ? "TV camera · next in " + L.tvNext.toFixed(1) + " s" : "TV camera";
+  $("oaTvBar").style.width = (tv * 100).toFixed(0) + "%";
+  $("oaAge").textContent = age;
+  $("oaWait").classList.toggle("show", !scrub && !!L.waiting);
+  const dy = !scrub && L.dyn && L.dyn.on;
+  $("oaRate").classList.toggle("show", !!dy);
+  if (dy) $("oaDynLbl").textContent = L.dynLabel || "Dynamic camera";
+}
+const dynLabelNow = () => st.scrubT != null ? ((shotAt(st.scrubT) || {}).e || {}).camName : (st.live && st.live.dynLabel);
+async function rate(v) { try { await apiPost("dyn/rate", { v }); toast(v > 0 ? "Noted - more angles like this one." : "Noted - fewer angles like this one."); pollLearned(); } catch (e) { toast(e.message); } }
+$("rateUp").onclick = () => rate(1); $("rateDn").onclick = () => rate(-1);
+async function pollLearned() { try { lrn = await apiJ("dyn"); } catch (e) {} }
+setInterval(() => { if (opt.learned && st.mode === "live") pollLearned(); }, 20000);
+// what was learnt about the track, on the map: pit road ends, stalls, crashes
+function drawLearned(P, s, tw) {
+  if (!lrn || !geo || (st.map && lrn.track && st.map.track && lrn.track !== st.map.track && st.mode === "live")) return;
+  const dot = (x, y, r, col, a) => { const [qx, qy] = P(x, y); cx.globalAlpha = a; cx.fillStyle = col; cx.beginPath(); cx.arc(qx, qy, r, 0, 7); cx.fill(); cx.globalAlpha = 1; };
+  for (const c of lrn.spots || []) { dot(c[0], c[1], 6 + Math.min(10, c[2] * 2), "#eb554b", .25); dot(c[0], c[1], 3, "#eb554b", .9); }
+  for (const c of lrn.stallSpots || []) dot(c[0], c[1], 2.4, "#b07cff", .8);
+  const tick = (d, label, col) => {
+    if (d == null) return;
+    const [ax, ay] = P(...geo.at(d * geo.lapScale, (tw / 2 + 3) / s)), [bx, by] = P(...geo.at(d * geo.lapScale, -(tw / 2 + 14) / s));
+    cx.strokeStyle = col; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(bx, by); cx.stroke();
+    cx.fillStyle = col; cx.font = "700 10.5px system-ui"; cx.fillText(label + (lrn.pitKnown ? "" : " (est.)"), bx + 5, by + 4);
+  };
+  tick(lrn.pitIn, "PIT IN", "#6db3ff"); tick(lrn.pitOut, "PIT OUT", "#6db3ff");
+}
+function renderChips() {
+  const L = st.live, c = [];
+  const hdr = st.fileHdr;
+  if (st.sim) {
+    c.push('<span class="chip" style="background:#3a2a66;color:#d9c8ff">Preview</span><span class="chip">' + esc(st.sim.track) + '</span><span class="chip">' + esc(st.sim.title || st.sim.name) + "</span>");
+    if (st.sim.dyn) c.push('<span class="chip" style="background:#4a1f3d;color:#ff9fdc">Dynamic cameras</span>');
+  } else if (st.mode === "file") {
+    c.push('<span class="chip file">Recording</span>');
+    if (hdr) c.push('<span class="chip">' + esc(hdr.track) + '</span><span class="chip opt">' + esc(hdr.session) + '</span><span class="chip opt">' + esc(hdr.started) + "</span>");
+  } else if (L) {
+    c.push(st.scrubT != null ? '<span class="chip scrub">Looking back</span>' : '<span class="chip live"><i></i>Live</span>');
+    if (!L.attached) c.push('<span class="chip">NR2003 not found</span>');
+    else {
+      c.push('<span class="chip">' + esc(L.track || "?") + "</span>");
+      c.push('<span class="chip opt">' + esc(L.session) + "</span>");
+      if (L.session === "race") {
+        c.push('<span class="chip">Lap ' + L.lap + (L.laps ? " / " + L.laps : "") + "</span>");
+        c.push(L.flag === 7 ? '<span class="chip green">Green</span>' : L.flag === 5 ? '<span class="chip">One to go</span>' : '<span class="chip yellow">Caution</span>');
+      }
+      if (L.paused) c.push('<span class="chip yellow">Director paused</span>');
+      if (L.replay) c.push('<span class="chip" style="background:#3a1616;color:#ff8a80">Replay</span>');
+    }
+  }
+  const h = c.join("");
+  if (h !== renderChips.last) { $("chips").innerHTML = h; renderChips.last = h; }
+}
+
+// ---------------------------------------------------------------- decisions list
+function evLine(e) {
+  const tag = SRC_TAG[e.src] || ["?", "#888"];
+  const info = st.cars[e.car] || {};
+  const who = e.car >= 0 ? "#" + (e.num || info.num || "?") + " " + (info.name || (e.name || "").replace(/^#\S+\s/, "")) : "-";
+  const cam = e.tg >= 0 ? GROUP_NAME[e.tg] + "-" + e.tn : e.camName;
+  let ds = esc(e.why || "");
+  if (e.src === "cut" && e.best >= 0) ds += ' <em>· score ' + e.best.toFixed(0) + " vs " + e.cur.toFixed(0) + "</em>";
+  if (e.note) ds += " <em>· " + esc(e.note) + "</em>";
+  return { tag, who, cam, ds };
+}
+function renderEvents() {
+  const box = $("evList"), list = st.events;
+  $("evCount").textContent = list.length ? list.filter(e => e.src === "cut").length + " cuts · " + list.length + " changes" : "";
+  const items = [];
+  for (let i = list.length - 1, k = 0; i >= 0 && k < 250; i--) {
+    const e = list[i];
+    if (e.src === "tv" && !opt.tvInList) continue;
+    k++;
+    const l = evLine(e);
+    items.push('<div class="ev' + (i === st.selEv ? " sel" : "") + '" data-i="' + i + '"><div class="tm">' + fmtT(e.t - tl0()) + (e.lap ? "<small>lap " + e.lap + "</small>" : "") +
+      '</div><div style="min-width:0"><div class="hd"><span class="tag" style="background:' + l.tag[1] + '">' + l.tag[0] + "</span>" +
+      (() => { const im = e.car >= 0 ? art("num", e.num || (st.cars[e.car] || {}).num) : null; return im ? '<img src="' + im.src + '" alt="">' : ""; })() + "<b>" + esc(l.who) +
+      '</b><span style="color:' + famE(e).c + ';white-space:nowrap">' + esc(l.cam || "") + '</span></div><div class="ds">' + l.ds + "</div></div></div>");
+  }
+  if (!items.length) items.push('<div class="ev" style="cursor:default"><div></div><div class="ds">' + (st.mode === "file" ? "Nothing recorded." : "The director's cuts show here as they happen.") + "</div></div>");
+  box.innerHTML = items.join("");
+}
+$("evList").addEventListener("click", ev => {
+  const d = ev.target.closest(".ev[data-i]"); if (!d) return;
+  const i = +d.dataset.i, e = st.events[i];
+  st.selEv = i; scrubTo(e.t + .05, true); renderEvents();
+});
+
+// ---------------------------------------------------------------- timeline
+const tc = $("tlc"), tx = tc.getContext("2d");
+const LANES = [["FLAG", 8], ["DRIVER", 28], ["CAMERA", 28], ["SHOT", 18], ["CUTS", 18]];
+const TL_LEFT = 74;
+function tl0() { return st.events.length ? st.events[0].t : st.samples.length ? st.samples[0].t : 0; }
+function tlNow() {
+  if (st.mode === "file") { const a = st.samples.length ? st.samples[st.samples.length - 1].t : 0, b = st.events.length ? st.events[st.events.length - 1].t : 0; return Math.max(a, b); }
+  return st.live ? st.live.t : tl0();
+}
+function tlRange() {
+  const t0 = tl0(), now = tlNow();
+  if (!st.win) return [t0, Math.max(now, t0 + 10)];
+  if (now - t0 < st.win) return [t0, t0 + st.win];        // a young session: from its start, filling to the right
+  const end = Math.min(now, Math.max(t0 + st.win, now - st.pan));
+  return [end - st.win, end];
+}
+function segs(keyOf) {
+  const out = [], e = st.events, end = tlNow();
+  for (let i = 0; i < e.length; i++) {
+    const k = keyOf(e[i]); if (k == null) continue;
+    if (out.length && out[out.length - 1].k === k) continue;
+    if (out.length) out[out.length - 1].t1 = e[i].t;
+    out.push({ k, t0: e[i].t, t1: end, e: e[i], i });
+  }
+  return out;
+}
+function drawTimeline() {
+  const { w, h, d } = fitCanvas(tc);
+  tx.setTransform(d, 0, 0, d, 0, 0);
+  tx.clearRect(0, 0, w, h);
+  tx.fillStyle = "#14171d"; tx.fillRect(0, 0, w, h);
+  const [ta, tb] = tlRange(), t0 = tl0();
+  const W = w - TL_LEFT - 12, X = t => TL_LEFT + (t - ta) / Math.max(1e-6, tb - ta) * W;
+  // lane frames
+  let y = 26; const lanes = {};
+  tx.font = "700 10.5px system-ui"; tx.textBaseline = "middle";
+  for (const [n, hh] of LANES) {
+    lanes[n] = [y, hh];
+    tx.fillStyle = "#5b6372"; tx.fillText(n, 10, y + hh / 2);
+    tx.fillStyle = "#191c23"; tx.fillRect(TL_LEFT, y, W, hh);
+    y += hh + 6;
+  }
+  // time axis: game time + lap ticks
+  const span = tb - ta, steps = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
+  const step = steps.find(s => W / (span / s) > 70) || 3600;
+  tx.fillStyle = "#6b7383"; tx.font = "600 10.5px system-ui";
+  for (let t = Math.ceil((ta - t0) / step) * step + t0; t <= tb; t += step) {
+    const x = X(t); tx.fillRect(x, 4, 1, 9); tx.fillText(fmtT(t - t0), x + 4, 9);
+    tx.fillStyle = "rgba(255,255,255,.03)"; tx.fillRect(x, 26, 1, y - 32); tx.fillStyle = "#6b7383";
+  }
+  if (st.laps.length) {
+    const vis = st.laps.filter(l => l[0] >= ta && l[0] <= tb && l[1] > 0);
+    const every = Math.max(1, Math.ceil(vis.length / Math.max(1, W / 46)));
+    tx.fillStyle = "#8a7a3a";
+    for (const l of vis) if (l[1] % every === 0) { const x = X(l[0]); tx.fillRect(x, 16, 1, 8); tx.fillText("L" + l[1], x + 4, 20); }
+  }
+  // flag strip
+  { const [ly, lh] = lanes.FLAG, f = st.flags.length ? st.flags : [[t0, 7]];
+    for (let i = 0; i < f.length; i++) {
+      const a = Math.max(ta, f[i][0]), b = Math.min(tb, i + 1 < f.length ? f[i + 1][0] : tlNow());
+      if (b <= a) continue; tx.fillStyle = flagCol(f[i][1], st.sessionRace); tx.fillRect(X(a), ly, Math.max(1, X(b) - X(a)), lh);
+    } }
+  // block lanes
+  const block = (lane, list, colOf, labOf) => {
+    const [ly, lh] = lanes[lane];
+    for (const s of list) {
+      if (s.t1 < ta || s.t0 > tb) continue;
+      const a = Math.max(X(s.t0), TL_LEFT), b = Math.min(X(s.t1), TL_LEFT + W), wd = b - a;
+      if (wd <= 0) continue;
+      tx.fillStyle = colOf(s); tx.fillRect(a, ly, Math.max(1, wd - 1), lh);
+      let lab = labOf(s);
+      const card = lane === "DRIVER" && s.k >= 0 ? art("num", (st.cars[s.k] || {}).num || s.e.num) : null;
+      if (card && wd > 30) {
+        const hh = lh - 6, ww = Math.min(hh * 2.6, card.naturalWidth / card.naturalHeight * hh);
+        tx.fillStyle = "rgba(10,12,16,.55)"; tx.fillRect(a + 2, ly + 2, Math.min(ww + 6, wd - 4), lh - 4);
+        tx.save(); tx.beginPath(); tx.rect(a, ly, wd - 2, lh); tx.clip(); tx.drawImage(card, a + 5, ly + 3, ww, hh); tx.restore();
+        lab = wd > ww + 50 ? lab.replace(/^#\S+\s*/, "") : "";
+        if (lab) { tx.save(); tx.beginPath(); tx.rect(a, ly, wd - 2, lh); tx.clip(); tx.fillStyle = "rgba(10,12,16,.92)"; tx.font = "700 12px system-ui"; tx.fillText(lab, a + ww + 14, ly + lh / 2 + .5); tx.restore(); }
+        continue;
+      }
+      if (lab && wd > 26) {
+        tx.save(); tx.beginPath(); tx.rect(a, ly, wd - 2, lh); tx.clip();
+        tx.fillStyle = "rgba(10,12,16,.92)"; tx.font = (lh > 20 ? "700 12px " : "700 10px ") + "system-ui"; tx.fillText(lab, a + 5, ly + lh / 2 + .5); tx.restore();
+      }
+    }
+  };
+  const carSegs = segs(e => e.car), camSegs = segs(e => e.src === "replay" ? "R" + e.cam : e.tg >= 0 ? e.cam + ":" + e.tg + ":" + e.tn : "" + e.cam),
+        kindSegs = segs(e => e.src === "replay" ? "REPLAY" : e.src === "drive" ? "YOU" : e.kind);
+  block("DRIVER", carSegs, s => { const i = st.cars[s.k]; return opt.art && i && i.color ? i.color : s.i % 2 ? "#aeb6c4" : "#c9d0db"; },
+    s => s.k >= 0 ? "#" + ((st.cars[s.k] || {}).num || s.e.num) + " " + (((st.cars[s.k] || {}).name || "").split(" ").slice(-1)[0] || "") : "");
+  block("CAMERA", camSegs, s => {
+    if (s.e.src === "replay") return "#eb554b";
+    if (s.e.tg >= 0) { const g = st.map && st.map.tv[s.e.tg]; const k = g ? g.findIndex(c => c.n === s.e.tn) : 0; return BAND_COL[Math.max(0, k) % 6]; }
+    return famE(s.e).c;
+  }, s => s.e.src === "replay" ? "Replay" : s.e.tg >= 0 ? GROUP_NAME[s.e.tg] + "-" + s.e.tn : s.e.camName);
+  block("SHOT", kindSegs, s => KIND_COL[s.k] || "#3cc8c8", s => s.k);
+  // the marks: a cut (car change), a camera change, the game's TV change, a setting
+  { const [ly, lh] = lanes.CUTS, m = ly + lh / 2;
+    for (const e of st.events) {
+      if (e.t < ta || e.t > tb) continue;
+      const x = X(e.t);
+      if (e.src === "cut" || e.src === "start") { tx.fillStyle = "#ffc400"; tx.beginPath(); tx.moveTo(x, m - 6); tx.lineTo(x + 5, m); tx.lineTo(x, m + 6); tx.lineTo(x - 5, m); tx.fill();
+        tx.fillStyle = "rgba(255,196,0,.18)"; tx.fillRect(x, 26, 1, ly - 26); }
+      else if (e.src === "camera") { tx.fillStyle = "#3c9cff"; tx.beginPath(); tx.arc(x, m, 3.5, 0, 7); tx.fill(); }
+      else if (e.src === "tv") { tx.fillStyle = "#5a6a84"; tx.fillRect(x - .5, m - 4, 1.5, 8); }
+      else if (e.src === "setting") { tx.fillStyle = "#aa78ff"; tx.fillRect(x - 4, m - 4, 8, 8); tx.fillRect(x, 26, 1, ly - 26); }
+      else { tx.fillStyle = (SRC_TAG[e.src] || [0, "#888"])[1]; tx.beginPath(); tx.moveTo(x - 5, m + 5); tx.lineTo(x + 5, m + 5); tx.lineTo(x, m - 5); tx.fill(); }
+      if (e.note && /waited|anyway/.test(e.note)) { tx.strokeStyle = "#ffd84a"; tx.lineWidth = 1.5; tx.beginPath(); tx.arc(x, m, 8, 0, 7); tx.stroke(); }
+    } }
+  // the play head: now, or the moment being looked at
+  const ht = st.scrubT != null ? st.scrubT : tlNow();
+  if (ht >= ta && ht <= tb) {
+    const x = X(ht);
+    tx.fillStyle = st.scrubT != null ? "#8fe0ff" : "#ff5a4f"; tx.fillRect(x - 1, 22, 2, y - 26);
+    tx.beginPath(); tx.moveTo(x - 6, 16); tx.lineTo(x + 6, 16); tx.lineTo(x, 24); tx.fill();
+  }
+  if (hover != null) { const x = X(hover); tx.fillStyle = "rgba(255,255,255,.35)"; tx.fillRect(x, 26, 1, y - 32); }
+  drawTimeline.X = X; drawTimeline.lanes = lanes; drawTimeline.range = [ta, tb]; drawTimeline.W = W;
+  drawTimeline.segs = { DRIVER: carSegs, CAMERA: camSegs, SHOT: kindSegs };
+}
+let hover = null, dragging = false;
+function tAtX(px) { const [ta, tb] = drawTimeline.range || [0, 1]; return ta + (px - TL_LEFT) / Math.max(1, drawTimeline.W) * (tb - ta); }
+function scrubTo(t, center) {
+  const lo = tl0(), hi = tlNow();
+  t = Math.max(lo, Math.min(hi, t));
+  if (st.mode === "live" && hi - t < .6 && !center) { st.scrubT = null; st.at = null; renderOnAir(); return; }
+  st.scrubT = t; fetchAt(t);
+  if (center && st.win) { const [ta, tb] = tlRange(); if (t < ta || t > tb) st.pan = Math.max(0, tlNow() - t - st.win / 2); }
+  renderOnAir(); renderChips();
+}
+tc.addEventListener("pointerdown", e => { const r = tc.getBoundingClientRect(); if (e.clientX - r.left < TL_LEFT) return; dragging = true; tc.setPointerCapture(e.pointerId); scrubTo(tAtX(e.clientX - r.left)); });
+tc.addEventListener("pointermove", e => {
+  const r = tc.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  if (px < TL_LEFT) { hover = null; $("tip").style.display = "none"; return; }
+  hover = tAtX(px);
+  if (dragging) scrubTo(hover);
+  showTip(e.clientX, e.clientY, px, py);
+});
+tc.addEventListener("pointerup", () => dragging = false);
+tc.addEventListener("pointerleave", () => { hover = null; $("tip").style.display = "none"; });
+tc.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { const [ta, tb] = tlRange(); st.pan = Math.max(0, st.pan + (e.deltaX || e.deltaY) / 400 * (tb - ta)); }
+  else {
+    const all = Math.max(30, tlNow() - tl0()); let w = st.win || all;
+    w = Math.max(20, Math.min(all, w * (e.deltaY > 0 ? 1.25 : .8)));
+    st.win = w >= all ? 0 : w;
+  }
+  setZoomButtons();
+}, { passive: false });
+function showTip(cxp, cyp, px, py) {
+  const tip = $("tip"), L = drawTimeline.lanes; if (!L) return;
+  let lane = null; for (const n in L) if (py >= L[n][0] - 3 && py <= L[n][0] + L[n][1] + 3) lane = n;
+  const t = hover; let html = "";
+  if (lane === "CUTS") {
+    let best = null, bd = 9; for (const e of st.events) { const dd = Math.abs(drawTimeline.X(e.t) - px); if (dd < bd) { bd = dd; best = e; } }
+    if (best) { const l = evLine(best); html = '<span class="tag" style="background:' + l.tag[1] + '">' + l.tag[0] + "</span> <b>" + esc(l.who) + '</b> <span class="m">' + esc(l.cam || "") + " · " + fmtT(best.t - tl0()) + (best.lap ? " · lap " + best.lap : "") + '</span><div class="r">' + l.ds + "</div>"; }
+  } else if (lane && drawTimeline.segs[lane]) {
+    const s = drawTimeline.segs[lane].find(s => t >= s.t0 && t < s.t1);
+    if (s) {
+      const l = evLine(s.e), dur = s.t1 - s.t0;
+      const head = lane === "DRIVER" ? esc(l.who) : lane === "CAMERA" ? esc(s.e.src === "replay" ? "Replay" : l.cam || "") : esc(s.k);
+      html = "<b>" + head + '</b> <span class="m">' + fmtT(s.t0 - tl0()) + " – " + fmtT(s.t1 - tl0()) + " · " + dur.toFixed(0) + ' s</span><div class="r">' + l.ds + "</div>";
+    }
+  } else if (lane === "FLAG") html = '<span class="m">Flag</span>';
+  if (!html) { tip.style.display = "none"; return; }
+  tip.innerHTML = html; tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(innerWidth - r.width - 8, cxp + 14) + "px";
+  tip.style.top = Math.max(8, cyp - r.height - 12) + "px";
+}
+function setZoomButtons() { document.querySelectorAll(".zb[data-w]").forEach(b => b.classList.toggle("on", +b.dataset.w === st.win)); $("btnLive").classList.toggle("on", st.mode === "live" && st.scrubT == null); $("btnLive").textContent = st.mode === "file" ? "BACK TO LIVE" : "LIVE"; }
+document.querySelectorAll(".zb[data-w]").forEach(b => b.onclick = () => { st.win = +b.dataset.w; st.pan = 0; setZoomButtons(); });
+$("btnLive").onclick = () => { backToLive(); setZoomButtons(); };
+
+// ---------------------------------------------------------------- map layer buttons + legend
+function renderLayers() {
+  const L = [["bands", "Bands: " + { active: "camera on air", all: "all TV sets", none: "off" }[opt.bands], () => opt.bands = { active: "all", all: "none", none: "active" }[opt.bands]],
+    ["labels", "Numbers: " + { onair: "on air", all: "all", none: "off" }[opt.labels], () => opt.labels = { onair: "all", all: "none", none: "onair" }[opt.labels]],
+    ["art", "Series art", () => { opt.art = !opt.art; const n = SERIES, l = HASLOGO; SERIES = "#"; setSeries(n, l); }],
+    ["smooth", "Smoothing: " + { normal: "normal", strong: "strong", off: "off" }[opt.smooth], () => { opt.smooth = { normal: "strong", strong: "off", off: "normal" }[opt.smooth]; prepMap(); }], ["spots", "Cut spots", () => opt.spots = !opt.spots], ["beam", "Camera beam", () => opt.beam = !opt.beam],
+    ["learned", "Learned track data", () => { opt.learned = !opt.learned; if (opt.learned) pollLearned(); }],
+    ["glow", "Pulse", () => opt.glow = !opt.glow], ["tvInList", "TV changes in list", () => { opt.tvInList = !opt.tvInList; renderEvents(); }]];
+  $("layers").innerHTML = L.map((l, i) => '<button class="lay' + (opt[l[0]] && opt[l[0]] !== "none" ? " on" : "") + '" data-i="' + i + '">' + l[1] + "</button>").join("");
+  $("layers").querySelectorAll(".lay").forEach(b => b.onclick = () => { L[+b.dataset.i][2](); saveOpt(); renderLayers(); });
+  $("legend").innerHTML = [["#3c9cff", "TV camera"], ["#ff9a3c", "Chase"], ["#46c878", "On-board"], ["#ffcc3c", "Rear"], ["#3cc8c8", "Helicopter / drone"], ["#b07cff", "Pit road"], ["#eb554b", "Replay"]]
+    .map(x => '<div><i style="background:' + x[0] + '"></i>' + x[1] + "</div>").join("") +
+    '<div style="margin-top:4px"><i style="background:#ffc400;height:9px;width:9px;border-radius:50%"></i>On air</div><div><i style="background:#ff7a45;height:9px;width:9px;border-radius:50%"></i>Battle partner</div>';
+}
+
+// ---------------------------------------------------------------- drawer: director settings + recordings
+const SET_KEYS = [["Shots", ["min_hold", "max_hold", "switch_margin", "revisit_after", "onboard_hold", "manual_hold"]],
+                  ["Battles", ["battle_gap", "lead_battle_depth", "lead_battle_hold"]],
+                  ["Cameras", ["follow_after", "camera_every", "tv_cut_gap", "tv_cut_wait"]]];
+function openDrawer(title) { $("dTitle").textContent = title; $("drawer").classList.add("open"); }
+function closeDrawer() { $("drawer").classList.remove("open"); }
+$("dClose").onclick = closeDrawer;
+$("btnSet").onclick = async () => {
+  openDrawer("Director settings");
+  $("dBody").innerHTML = '<div class="dnote">Loading...</div>';
+  let S; try { S = await apiJ("settings"); } catch (e) { $("dBody").innerHTML = '<div class="dnote">' + esc(e.message) + "</div>"; return; }
+  const F = {}; for (const p of S.pages) for (const f of p.fields) F[f.key] = f;
+  let h = '<div class="dnote">Changes apply at once and are saved to racevision.ini. Each change shows on the timeline as a purple mark, so you can see what it did.</div>';
+  for (const [sec, keys] of SET_KEYS) {
+    h += '<div class="sec">' + sec + "</div>";
+    for (const k of keys) {
+      const f = F[k]; if (!f) continue;
+      const ctl = f.kind === "toggle" ? '<button class="sw' + (f.value === "1" ? " on" : "") + '" data-k="' + k + '"></button>'
+        : '<input type="number" step="any" data-k="' + k + '" value="' + esc(f.value) + '">';
+      h += '<div class="fld"><label>' + esc(f.label) + "</label>" + ctl + "<small>" + esc(f.help) + "</small></div>";
+    }
+  }
+  h += '<div class="dnote">The cameras each kind of shot uses are on the phone page\'s Cameras tab and RaceVision\'s Cameras page.</div>';
+  $("dBody").innerHTML = h;
+  $("dBody").querySelectorAll("input[data-k]").forEach(inp => inp.onchange = async () => {
+    try { await api("set", { name: inp.dataset.k, value: inp.value }); inp.classList.add("saved"); setTimeout(() => inp.classList.remove("saved"), 1200); } catch (e) { toast(e.message); }
+  });
+  $("dBody").querySelectorAll(".sw[data-k]").forEach(b => b.onclick = async () => {
+    const v = b.classList.contains("on") ? "0" : "1";
+    try { await api("set", { name: b.dataset.k, value: v }); b.classList.toggle("on", v === "1"); } catch (e) { toast(e.message); }
+  });
+};
+$("btnFiles").onclick = async () => {
+  openDrawer("Recordings");
+  $("dBody").innerHTML = '<div class="dnote">Loading...</div>';
+  let F; try { F = await apiJ("director/files"); } catch (e) { $("dBody").innerHTML = '<div class="dnote">' + esc(e.message) + "</div>"; return; }
+  const cur = st.live && st.live.file;
+  $("dBody").innerHTML = '<div class="dnote">Every session RaceVision directs is recorded (the newest 30 are kept). Open one to scrub through it.</div><div class="sec">Sessions</div><div class="files">' +
+    (F.length ? F.map(f => { const m = f.name.replace(/\.jsonl$/, "").split("_"); const track = m.slice(2, -1).join(" "), sess = m[m.length - 1];
+      return '<button class="file" data-n="' + esc(f.name) + '"><b>' + esc(track || f.name) + "</b> · " + esc(sess) + (f.name === cur ? ' <span class="tag" style="background:#ff5a4f">NOW</span>' : "") +
+        "<small>" + esc(f.at) + " · " + (f.size / 1048576).toFixed(1) + " MB</small></button>"; }).join("") : '<div class="dnote">None yet.</div>') + "</div>" +
+    '<div class="dnote">Folder: %PROGRAMDATA%\\NR2003 Companions\\racevision\\timelines</div>';
+  $("dBody").querySelectorAll(".file").forEach(b => b.onclick = () => openFile(b.dataset.n));
+};
+
+// ---------------------------------------------------------------- camera sets: choose what NR2003 shows
+// NR2003 reads its camera files when a session loads. "Use now" also writes the sets into the cameras the game is using this
+// moment (RaceVision found where they live), so the next shot already shows the new set; "Save for the next session" only
+// writes the file. A preview runs a simulated race through the set before you pick it.
+let CS = null, csTrack = "";
+const keepSaved = () => { try { return localStorage.getItem("rvKeepSet") !== "0"; } catch (e) { return true; } };
+async function openSets(track) {
+  openDrawer("Camera sets");
+  $("dBody").innerHTML = '<div class="dnote">Loading...</div>';
+  try { CS = await apiJ("camsets", track ? { track } : {}); } catch (e) { $("dBody").innerHTML = '<div class="dnote">' + esc(e.message) + "</div>"; return; }
+  csTrack = CS.track; renderSets();
+}
+function setRowHtml(kind, e, ctx) {
+  const kd = ' data-kind="' + kind + '"';
+  const now = e.loaded, next = e.saved && e.name !== "stock";
+  const stock = e.name === "stock";
+  let b = '<div class="btns">';
+  if (kind === "track" && ctx.canPreview) b += '<button class="sb" data-act="prev"' + kd + ' data-n="' + esc(e.name) + '">Preview</button>';
+  if (ctx.canLive) b += '<button class="sb pri" data-act="now"' + kd + ' data-n="' + esc(e.name) + '">' + (stock ? "Back to the game's own, now" : "Use now") + "</button>";
+  if (ctx.canSave) b += '<button class="sb" data-act="save"' + kd + ' data-n="' + esc(e.name) + '">' + (stock ? "Game's own next session" : "Save for next session") + "</button>";
+  b += "</div>";
+  const cams = e.cams ? '<div class="cams">TV1 ' + e.cams[0] + " &middot; TV2 " + e.cams[1] + " &middot; spectator " + e.cams[2] + " cameras</div>" : "";
+  return '<div class="setrow' + (now ? " now" : next ? " next" : "") + '"><div class="top"><b>' + esc(stock ? "The game's own" : (e.title || e.name)) + "</b>" +
+    (now ? '<span class="badge now">in the game now</span>' : "") + (next ? '<span class="badge next">next session</span>' : "") +
+    (e.builtin ? '<span class="badge new">recipe</span>' : "") + "</div>" + (e.desc ? '<div class="ds">' + esc(e.desc) + "</div>" : "") + cams + b + "</div>";
+}
+function renderSets() {
+  const d = CS, here = d.current && csTrack === d.current;
+  let h = "";
+  if (!d.root) h += '<div class="setnote warn">RaceVision couldn\'t find its camsets folder (camsets_dir in racevision.ini), so there are no sets to choose from.</div>';
+  else if (d.live) h += '<div class="setnote good">NR2003 is running a session: <b>Use now</b> switches the cameras at once - the next shot shows them.</div>';
+  else if (d.attached) h += '<div class="setnote warn">NR2003 is running but no session is loaded yet. Pick a set now and it is used when the session loads (<b>Save for next session</b>).</div>';
+  else h += '<div class="setnote warn">NR2003 isn\'t running. Pick a set now and NR2003 uses it when the next session loads (<b>Save for next session</b>).</div>';
+  h += '<div class="sec">Track</div><select class="setpick" id="csTrackSel">' + d.tracks.map(t => '<option value="' + esc(t.name) + '"' + (t.name === csTrack ? " selected" : "") + ">" + esc(t.name) +
+    (t.name === d.current ? "  (loaded in NR2003)" : "") + (t.map ? "" : "  - no track map yet") + "</option>").join("") + "</select>";
+  h += '<label class="keep"><input type="checkbox" id="csKeep"' + (keepSaved() ? " checked" : "") + '> Use now also keeps it for the next sessions</label>';
+  h += '<div class="sec">TV cameras - ' + esc(csTrack || "no track") + "</div>";
+  if (d.trackSets && d.trackSets.length) {
+    const mapOk = (d.tracks.find(t => t.name === csTrack) || {}).map;
+    const ctx = { canLive: d.live && here, canSave: d.trackFile, canPreview: mapOk };
+    h += d.trackSets.map(e => setRowHtml("track", e, ctx)).join("");
+    if (d.live && !here) h += '<div class="setnote">NR2003 has <b>' + esc(d.current) + "</b> loaded - \"Use now\" only works for that track.</div>";
+    if (!d.trackFile) h += '<div class="setnote warn">This track\'s camera file isn\'t a loose file in the game folder (it is packed inside the track .dat), so it can only be switched live. Camera sets.cmd can take it out for you (Import).</div>';
+    if (!mapOk) h += '<div class="setnote">No track map yet, so no preview: Race Control and RaceVision draw it from the cars during any session.</div>';
+  } else h += '<div class="setnote">Choose a track.</div>';
+  if (d.series && d.seriesSets) {
+    h += '<div class="sec">Car cameras - ' + esc(d.series) + "</div>";
+    const guess = d.seriesWhy === "guess";
+    h += '<select id="csSeriesSel">' + (guess ? '<option value="">Which mod is this? (a guess: ' + esc(d.series) + ")</option>" : "") +
+      (d.seriesCands || []).map(n => '<option value="' + esc(n) + '"' + (n === d.series && !guess ? " selected" : "") + ">" + esc(n) + "</option>").join("") + "</select>";
+    if (guess) h += "<div class=\"setnote warn\">RaceVision can't tell which mod this is (many keep the default car cameras), so it guessed. Pick yours: Use now still works, but Save for next session waits until you do, so no other mod's files are touched.</div>";
+    const ctx = { canLive: d.live, canSave: !guess, canPreview: false };
+    h += d.seriesSets.map(e => setRowHtml("series", e, ctx)).join("");
+    h += '<div class="setnote">Car cameras are the bumper, roof, door and side views. They change with the series, not the track.</div>';
+  }
+  h += '<div class="dnote">The game\'s own files are kept: each set can be undone from here or with Camera sets.cmd.</div>';
+  $("dBody").innerHTML = h;
+  $("csTrackSel").onchange = e => openSets(e.target.value);
+  if ($("csSeriesSel")) $("csSeriesSel").onchange = e => { if (!e.target.value) return; apiPost("camsets/series", { name: e.target.value }).then(() => openSets(csTrack)).catch(x => toast(x.message)); };
+  $("csKeep").onchange = e => { try { localStorage.setItem("rvKeepSet", e.target.checked ? "1" : "0"); } catch (x) {} };
+  $("dBody").querySelectorAll("[data-act]").forEach(b => b.onclick = () => useSet(b.dataset.kind, b.dataset.act, b.dataset.n));
+}
+async function useSet(kind, act, name) {
+  if (act === "prev") { closeDrawer(); startPreview(csTrack, name, false, ((CS.trackSets || []).find(x => x.name === name) || {}).title); return; }
+  const who = kind === "series" ? CS.series : csTrack;
+  const live = act === "now", save = act === "save" || (act === "now" && keepSaved());
+  try {
+    const r = await apiPost(name === "stock" ? "camsets/restore" : "camsets/apply", { kind, who, name, live: live ? 1 : 0, save: save ? 1 : 0 });
+    const parts = [];
+    if (r.live === "done") parts.push(name === "stock" ? "The game's own cameras are back" : "Using \"" + (((CS.trackSets || []).concat(CS.seriesSets || []).find(x => x.name === name) || {}).title || name) + "\" now");
+    else if (r.live === "failed") parts.push("couldn't switch it live (" + r.liveMsg + ")");
+    if (r.saved === "done") parts.push(r.live === "done" ? "kept for the next sessions" : "saved - NR2003 uses it when the next session loads");
+    else if (r.saved === "failed") parts.push("couldn't save it (" + r.saveMsg + ")");
+    toast(parts.join("; ") + ".");
+  } catch (e) { toast(e.message); }
+  try { CS = await apiJ("camsets", { track: csTrack }); renderSets(); } catch (e) {}
+}
+$("btnSets").onclick = () => openSets();
+
+// a prompt when a session starts and nobody has picked cameras: the sets are one click away
+async function promptSets() {
+  let d; try { d = await apiJ("camsets"); } catch (e) { return; }
+  if (!d.session || !d.current || (d.trackSets || []).length < 2) return;
+  if (d.trackLoaded && d.trackLoaded !== "stock") return;
+  const key = "rvSetPrompt:" + d.current;
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, "1"); } catch (e) {}
+  const sets = d.trackSets.filter(s => s.name !== "stock").slice(0, 4);
+  const box = $("setPrompt");
+  box.innerHTML = "<span>TV cameras for <b>" + esc(d.current) + "</b>: the game's own.</span>" + sets.map(s => '<button class="sb" data-n="' + esc(s.name) + '">' + esc(s.title || s.name) + "</button>").join("") +
+    '<button class="sb pri" id="spAll">All sets / preview</button><button class="x" id="spX">&times;</button>';
+  box.hidden = false;
+  box.querySelectorAll("[data-n]").forEach(b => b.onclick = async () => {
+    try { const r = await apiPost("camsets/apply", { kind: "track", who: d.current, name: b.dataset.n, live: 1, save: keepSaved() ? 1 : 0 }); toast(r.live === "done" ? "Using \"" + b.dataset.n + "\" now." : "Saved for the next session (" + (r.liveMsg || "not live") + ")."); } catch (e) { toast(e.message); }
+    box.hidden = true;
+  });
+  $("spAll").onclick = () => { box.hidden = true; openSets(d.current); };
+  $("spX").onclick = () => box.hidden = true;
+  setTimeout(() => { box.hidden = true; }, 45000);
+}
+
+// ---------------------------------------------------------------- dynamic cameras: the drawer
+const DYN_ROLES = [["pit", "Pit road", "who dives in, the stall, the race off pit road"], ["crash", "Crashes", "a new angle on the wreck each time"], ["restart", "Restarts", "low and close at the green"],
+                   ["battle", "Battles and passes", "trackside, ahead of the cars"], ["finish", "The finish", "at the line on the last lap"]];
+async function openDyn() {
+  openDrawer("Dynamic cameras");
+  $("dBody").innerHTML = '<div class="dnote">Loading...</div>';
+  let S, D;
+  try { [S, D] = await Promise.all([apiJ("settings"), apiJ("dyn")]); } catch (e) { $("dBody").innerHTML = '<div class="dnote">' + esc(e.message) + "</div>"; return; }
+  lrn = D;
+  const F = {}; for (const p of S.pages) for (const f of p.fields) F[f.key] = f;
+  const sw = (k, lab, help) => F[k] ? '<div class="fld"><label>' + esc(lab) + '</label><button class="sw' + (F[k].value === "1" ? " on" : "") + '" data-k="' + k + '"></button><small>' + esc(help || F[k].help) + "</small></div>" : "";
+  const num = (k, lab, help) => F[k] ? '<div class="fld"><label>' + esc(lab) + '</label><input type="number" step="any" data-k="' + k + '" value="' + esc(F[k].value) + '"><small>' + esc(help || F[k].help) + "</small></div>" : "";
+  let h = '<div class="dnote">RaceVision puts its own cameras where the story is - the pit entry as the leaders come in, the stall, the race off pit road, a new angle on every crash, low at the restart, the line at the finish - and learns each track as it goes. It picks a different angle each time, favouring the ones that worked.</div>';
+  h += sw("dyn_cams", "Dynamic cameras", "Off = only the game's own cameras.");
+  h += num("dyn_chance", "How often (%)", "Of the shots that could have one, this many do.");
+  h += '<div class="sec">Where</div>' + DYN_ROLES.map(r => sw("dyn_" + r[0], r[1], r[2])).join("");
+  h += '<div class="sec">Learned about ' + esc(D.track || "this track") + "</div>";
+  h += '<div class="kv"><span>Pit road</span><span>' + (D.pitIn != null ? "in at " + D.pitIn + " m, out at " + D.pitOut + " m, " + (D.pitSide > 0 ? "left" : "right") + " of the track" + (D.pitKnown ? "" : " (estimate)") : "not known yet") + "</span>" +
+    "<span>Track half width</span><span>" + D.halfWidth + " m" + (D.widthKnown ? "" : " (default)") + "</span>" +
+    "<span>Stalls seen</span><span>" + D.stalls + "</span><span>Crash spots</span><span>" + D.crashes + "</span>" +
+    "<span>Cars that pit at a caution</span><span>" + (D.pitRate >= 0 ? D.pitRate + " % over " + D.cautions + " cautions" : "no cautions seen yet") + "</span></div>";
+  h += sw("dyn_learn", "Learn the track", "Saved per track in ProgramData\\NR2003 Companions\\racevision\\learned.");
+  h += '<div class="sec">Angles and how they scored</div>';
+  const roles = {}; for (const t of D.templates) { (roles[t.role] = roles[t.role] || []).push(t); }
+  const byId = {}; for (const t of D.templates) { const x = byId[t.id] = byId[t.id] || { id: t.id, label: t.label, role: t.role, n: 0, sum: 0 }; x.n += t.n; if (t.score != null) x.sum += t.score * t.n; }
+  h += Object.values(byId).map(x => { const sc = x.n ? x.sum / x.n : null;
+    return '<div class="dynrow"><span>' + esc(x.label) + ' <span style="color:var(--dim)">' + esc(x.role.replace("_", " ")) + "</span></span><span>" + (sc == null ? "untried" : Math.round(sc * 100) + " % &middot; " + x.n + (x.n === 1 ? " shot" : " shots")) +
+      '</span><div class="meter"><i style="width:' + (sc == null ? 0 : Math.round(sc * 100)) + '%"></i></div></div>'; }).join("");
+  h += '<div class="sec">Try it</div><div class="btns" style="display:flex;gap:6px;flex-wrap:wrap"><button class="sb pri" id="dynTest">Test camera on the car on air</button><button class="sb" id="dynMap">Show learned data on the map</button><button class="sb" id="dynForget">Forget this track</button></div>';
+  h += '<div class="setnote">The test puts a camera 24 m from the car on air for 8 s. If it looks off to one side, or up when it should look down, use the aim fixes below.</div>';
+  h += '<div class="sec">Following</div>' + sw("dyn_rig", "Smooth following", "A fast thread of its own follows the car between the game's physics ticks. Off = the old, jumpier way.") + sw("dyn_autozoom", "Zoom with the car", "The lens widens as the car comes close and narrows as it goes.") + num("dyn_smooth", "Pan smoothing", "1 = standard. Lower is quicker, higher is softer.");
+  h += '<div class="sec">Aim fixes</div>' + num("dyn_yaw_fix", "Aim correction (degrees)", "Added to the turn if the camera looks off to one side of the car.") + num("dyn_pitch_sign", "Tilt direction (1 or -1)", "-1 if the camera looks up when it should look down.") + num("dyn_half_width", "Track half width (m)", "0 = learn it from where the cars drive.");
+  $("dBody").innerHTML = h;
+  $("dBody").querySelectorAll("input[data-k]").forEach(inp => inp.onchange = async () => { try { await api("set", { name: inp.dataset.k, value: inp.value }); inp.classList.add("saved"); setTimeout(() => inp.classList.remove("saved"), 1200); } catch (e) { toast(e.message); } });
+  $("dBody").querySelectorAll(".sw[data-k]").forEach(b => b.onclick = async () => { const v = b.classList.contains("on") ? "0" : "1"; try { await api("set", { name: b.dataset.k, value: v }); b.classList.toggle("on", v === "1"); } catch (e) { toast(e.message); } });
+  $("dynTest").onclick = async () => { try { await apiPost("dyn/test"); toast("Test camera on for 8 seconds."); } catch (e) { toast(e.message); } };
+  $("dynMap").onclick = () => { opt.learned = true; saveOpt(); renderLayers(); pollLearned(); closeDrawer(); };
+  $("dynForget").onclick = async () => { if (!confirm("Forget what RaceVision learned about this track (pit road, crash spots, which angles worked)?")) return; try { await apiPost("dyn/forget"); toast("Forgotten."); openDyn(); } catch (e) { toast(e.message); } };
+}
+$("btnDyn").onclick = () => openDyn();
+
+// ---------------------------------------------------------------- preview: a simulated race through a camera set
+// A scripted race on the track's own map - a green run with battles and a pass, a crash, a caution with a pit cycle, the restart,
+// a last lap - and a director that follows it with the chosen set's TV cameras (and, if asked, dynamic cameras). The race is the
+// same for every set of a track, so two sets can be compared on the same action. It is played through the recording machinery
+// (map, on-air panel, decisions, timeline), so everything can be scrubbed. Nothing here touches NR2003.
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+const wrapD = (d, L) => { d = ((d % L) + L) % L; return d >= L / 2 ? d - L : d; };      // -L/2 .. L/2
+const lerp = (a, b, t) => a + (b - a) * t;
+const SIM_COLORS = ["#e6362b", "#2f6fe0", "#f2c230", "#2fb36b", "#f07a1a", "#9a55d6", "#17b3c4", "#d6407f", "#7dc23a", "#c9ced8", "#8a5a3c", "#ff9a8a", "#4ea1ff", "#d8c64a", "#5fd0a0", "#b08aff"];
+const SIM_NUMS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 17, 18];
+const SIM_NAMES = ["Sam Avery", "Jo Barlow", "Kit Carver", "Lee Dalton", "Max Ellis", "Nia Foster", "Ollie Grant", "Pat Hale", "Quinn Irving", "Ray Jensen", "Sky Keller", "Tom Lowry", "Uma Marsh", "Vic Nolan", "Wes Ortiz", "Yan Pryce"];
+
+function simProject(G, M, x, y) {                  // nearest centre-line point: map distance and lateral offset (+ = left of travel)
+  const n = G.n; let best = 0, bd = 1e18;
+  for (let i = 0; i < n; i++) { const dx = G.X(i) - x, dy = G.Y(i) - y, dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = i; } }
+  const ax = G.X(best - 2), ay = G.Y(best - 2), bx = G.X(best + 2), by = G.Y(best + 2); let tx = bx - ax, ty = by - ay; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+  return { d: best / n * M.len, lat: (x - G.X(best)) * -ty + (y - G.Y(best)) * tx };
+}
+function simPitRoad(M, G, P, dynInfo) {            // pit road: what RaceVision has learnt / been told for this track, else from the two pit cameras
+  const same = dynInfo && dynInfo.track === M.track, L = M.len, k = M.lap > 0 ? L / M.lap : 1;
+  let hw = same && dynInfo.halfWidth ? dynInfo.halfWidth : 9, side = same && dynInfo.pitSide ? dynInfo.pitSide : 0, inD = null, outD = null, known = false;
+  if (same && dynInfo.pitIn != null) { inD = dynInfo.pitIn * k; outD = dynInfo.pitOut * k; known = !!dynInfo.pitKnown; }
+  const cams = (P.pit || []).map(c => simProject(G, M, c.x, c.y));
+  if (!side && cams.length === 2) side = (cams[0].lat + cams[1].lat) >= 0 ? 1 : -1;
+  if (!side) side = -1;
+  if (inD == null && cams.length === 2) {
+    const span = wrapD(cams[1].d - cams[0].d, L), a = span >= 0 ? cams[0].d : cams[1].d;
+    inD = (a - 40 * k + L) % L; outD = (inD + Math.abs(span) + 90 * k) % L;
+  }
+  if (inD == null) { inD = L * 0.82; outD = L * 0.12; }
+  let road = ((outD - inD) % L + L) % L; if (road < 240 * k || road > L * 0.45) road = 300 * k;
+  return { inD, outD: (inD + road) % L, road, side, hw, known };
+}
+function simRace(M, G, P, dynInfo) {
+  const L = M.len, rnd = mulberry32(hashStr(M.track)), N = 16;
+  const vBase = Math.max(42, Math.min(70, L / 16)), lapT = L / vBase, pace = Math.min(30, vBase * .55);
+  const pit = simPitRoad(M, G, P, dynInfo), hw = pit.hw;
+  // where the crash happens: the sharpest bend in the middle of the lap
+  let sCrash = L * .38, bestK = -1;
+  for (let i = Math.floor(G.n * .25); i < G.n * .6; i++) {
+    const a = Math.atan2(G.Y(i) - G.Y(i - 3), G.X(i) - G.X(i - 3)), b = Math.atan2(G.Y(i + 3) - G.Y(i), G.X(i + 3) - G.X(i));
+    const k = Math.abs(wrapD((b - a) * 1000, 6283.2)) / 1000; if (k > bestK) { bestK = k; sCrash = i / G.n * L; }
+  }
+  const gaps = [0, 22, 10, 36, 14, 9, 28, 17, 12, 30, 16, 22, 11, 27, 14, 20], mult = [1, 1.011, 1.002, 1.004, .998, 1.0, .997, 1.0, .996, .999, .995, .997, .994, .996, .993, .99];
+  const cars = []; let s0 = L * .62;
+  for (let i = 0; i < N; i++) { s0 -= gaps[i]; cars.push({ i, s: s0, lat: ((i % 3) - 1) * 3.2, lane: ((i % 3) - 1) * 3.2, v: vBase * mult[i], m: mult[i], st: "run", pit: false, ph: 0, until: 0, crashed: false, k: -1, rejoin: 0 }); }
+  const out = { samples: [], flags: [], laps: [], marks: {}, pit, hw, N, vBase, lapT, sCrash, L, cars: cars.map(c => ({ i: c.i })) };
+  const dt = .1, tMin = Math.max(28, 1.6 * lapT), tMax = 420;
+  let phase = "green1", t = 0, flag = 7, tc = 0, tR = 0, tEnd = 0, A = -1, B = -1, pitters = [], nextStall = 0, lastLap = 0, white = false, done = 0, hadWhite = 0;
+  const ranked = () => cars.slice().sort((a, b) => b.s - a.s);
+  const lapOf = c => Math.floor(c.s / L);
+  let leaderLap = 0;
+  const step = () => {
+    const order = ranked();
+    // ---- script
+    if (phase === "green1" && t >= tMin) {
+      if (A < 0) { A = order[4].i; B = order[5].i; }
+      const a = cars[A], prev = a.s - a.v * dt;
+      if (Math.floor((a.s - sCrash) / L) > Math.floor((prev - sCrash) / L)) {      // A reaches the bend: it loses it
+        phase = "caution"; tc = t; flag = 1; a.st = "crash"; a.crashed = true; a.until = t; a.cdir = -pit.side; a.cext = 8; out.marks.crash = { t, car: A, s: a.s % L }; out.marks.caution = t + 1.5;
+      }
+    }
+    if (phase === "caution") {
+      if (B >= 0 && !cars[B].crashed && t > tc + .7) { cars[B].st = "crash"; cars[B].crashed = true; cars[B].until = t; cars[B].cdir = -pit.side; cars[B].cext = 4; out.marks.crash2 = t; }   // (both go to the side away from pit road)
+      if (t > tc + 22 && !pitters.length) {                                        // pit road opens: the front runners come in (not the wrecked cars)
+        pitters = ranked().filter(c => !c.crashed).slice(0, 7).map(c => c.i); out.marks.pitOpen = t;
+        pitters.forEach(i => { cars[i].st = "toPit"; });
+      }
+      const pitting = pitters.some(i => cars[i].pit || cars[i].st === "toPit");
+      if (t > tc + 60 && !pitting && !tR) {                                         // everyone is back: green at the next line
+        const ld = ranked().find(c => !c.crashed && !c.pit);
+        const prev = ld.s - ld.v * dt;
+        if (Math.floor(ld.s / L) > Math.floor(prev / L)) { phase = "restart"; tR = t; flag = 7; out.marks.green = t; tEnd = t + Math.min(Math.max(2.6 * lapT, 50), 85); }
+      }
+    }
+    if (phase === "restart" && !white && t >= tEnd - lapT) { white = true; flag = 5; out.marks.white = t; }
+    if ((phase === "restart") && t >= tEnd) {
+      const ld = ranked().find(c => !c.crashed), prev = ld.s - ld.v * dt;
+      if (Math.floor(ld.s / L) > Math.floor(prev / L)) { phase = "done"; done = t + 8; out.marks.finish = t; out.marks.winner = ld.i; }
+    }
+    // ---- speeds, lanes
+    const byS = ranked();
+    for (const c of cars) {
+      if (c.st === "crash") {
+        c.v = Math.max(0, c.v - 22 * dt);
+        const target = c.cdir * (hw + c.cext); c.lat += Math.sign(target - c.lat) * Math.min(Math.abs(target - c.lat), 6 * dt);
+        if (c.v <= .01) c.st = "wreck"; continue;
+      }
+      if (c.st === "wreck") { c.v = 0; continue; }
+      let want = phase === "caution" ? pace : vBase * c.m;
+      if (phase === "restart" && t - tR < 7) want = lerp(pace, vBase * c.m, Math.min(1, (t - tR) / 6));
+      if (phase === "done") want = pace * 1.2;
+      // pit road
+      if (c.st === "toPit") {
+        const rel = ((c.s % L) - pit.inD + L) % L;
+        if (rel < 120 && rel > 0 && (c.prevRel === undefined || c.prevRel > L - 200 || c.prevRel > rel)) { c.st = "in"; c.pit = true; c.ph = 1; c.k = nextStall++; c.entryS = c.s - rel; }
+        c.prevRel = rel;
+      }
+      if (c.st === "in" || c.st === "stall" || c.st === "leave") {
+        const rel = c.s - c.entryS, stallAt = Math.min(pit.road - 40, 70 + 14 * c.k);
+        const tl = pit.side * (hw + (c.st === "stall" ? 16 : 10));
+        c.lat += Math.sign(tl - c.lat) * Math.min(Math.abs(tl - c.lat), 5 * dt);
+        if (c.st === "in") { want = Math.min(want, 16); if (rel >= stallAt) { c.st = "stall"; c.ph = 2; c.until = t + 5.5 + .4 * c.k; c.v = 0; } }
+        if (c.st === "stall") { c.v = 0; if (t >= c.until) { c.st = "leave"; c.ph = 3; } }
+        if (c.st === "leave") { want = 16; if (rel >= pit.road) { c.st = "merge"; c.rejoin = t; c.mergeFrom = c.lat; } }
+      }
+      if (c.st === "merge") { const f = Math.min(1, (t - c.rejoin) / 5); c.lat = lerp(c.mergeFrom, c.lane, f); want = pace; if (f >= 1) { c.st = "run"; c.pit = false; c.ph = 0; } }
+      else if (c.st === "run" || c.st === "toPit") c.lat += Math.sign(c.lane - c.lat) * Math.min(Math.abs(c.lane - c.lat), 3 * dt);
+      // car following: the nearest car ahead in about the same lane
+      let lead = null, gapA = 1e9;
+      for (const o of byS) {
+        if (o === c) continue;
+        const gap = o.s - c.s; const g2 = gap > L / 2 ? gap - L : gap < -L / 2 ? gap + L : gap;
+        if (g2 > 0 && g2 < gapA && Math.abs(o.lat - c.lat) < 2.8 && !(o.st === "stall" && c.st === "run") ) { gapA = g2; lead = o; }
+      }
+      if (c.st === "run" || c.st === "toPit" || c.st === "in" || c.st === "leave" || c.st === "merge") {
+        if (lead) {
+          const gmin = lead.st === "wreck" || lead.st === "crash" ? 22 : 9;
+          want = Math.min(want, Math.max(0, lead.v + (gapA - gmin) / .8));
+          // faster car behind a slower one in the same lane: move out to pass (a lane change of 3.4 m)
+          if (c.st === "run" && gapA < 24 && lead.v < want - .2 && (phase === "green1" || phase === "restart") && lead.st === "run" && !c.passUntil) { c.lane = lead.lane + (rnd() < .5 ? 3.4 : -3.4); c.passUntil = t + 7; c.lane = Math.max(-hw + 2, Math.min(hw - 2, c.lane)); }
+        }
+        if (c.passUntil && t > c.passUntil) { c.lane = ((c.i % 3) - 1) * 3.2; c.passUntil = 0; }
+      }
+      c.v += Math.max(-9 * dt, Math.min(5 * dt, want - c.v));
+      if (c.v < 0) c.v = 0;
+    }
+    for (const c of cars) c.s += c.v * dt;
+  };
+  let k = 0;
+  const record = () => {
+    const lead = cars.reduce((a, b) => b.s > a.s ? b : a, cars[0]);
+    const ll = Math.floor(lead.s / L); if (ll !== leaderLap) { leaderLap = ll; out.laps.push([t, ll + 1]); }
+    const arr = new Float32Array(N * 7);
+    cars.forEach((c, j) => {
+      const d = ((c.s % L) + L) % L, [x, y] = G.at(d, c.lat);
+      arr[j * 7] = c.s; arr[j * 7 + 1] = c.lat; arr[j * 7 + 2] = x; arr[j * 7 + 3] = y; arr[j * 7 + 4] = c.v; arr[j * 7 + 5] = c.pit ? 1 : 0; arr[j * 7 + 6] = c.ph + (c.crashed ? 10 : 0);
+    });
+    if (!out.flags.length || out.flags[out.flags.length - 1][1] !== flag) out.flags.push([t, flag]);
+    out.samples.push({ t, flag, lap: ll + 1, a: arr });
+  };
+  while (t < tMax && !(phase === "done" && t > done)) { record(); step(); t += dt; k++; }
+  record();
+  out.T = t; out.tc = tc; out.tR = tR; out.tEnd = tEnd;
+  return out;
+}
+
+// the director: who is on air and why, with which camera - from the race above
+function simDirect(W, M, G, set, o) {
+  const rnd = mulberry32(o.seed), L = M.len, kLap = M.lap > 0 ? M.lap / M.len : 1, N = W.N, S = W.samples, dt = .1;
+  const events = [], tvg = M.tv || [], pit = W.pit;
+  const num = i => SIM_NUMS[i], who = i => "#" + SIM_NUMS[i] + " " + SIM_NAMES[i];
+  const car = (k, i) => ({ s: S[k].a[i * 7], lat: S[k].a[i * 7 + 1], x: S[k].a[i * 7 + 2], y: S[k].a[i * 7 + 3], v: S[k].a[i * 7 + 4], pit: S[k].a[i * 7 + 5] > 0, ph: S[k].a[i * 7 + 6] % 10, crashed: S[k].a[i * 7 + 6] >= 10 });
+  const rank = k => { const a = []; for (let i = 0; i < N; i++) a.push(i); a.sort((p, q) => S[k].a[q * 7] - S[k].a[p * 7]); return a; };
+  const dOf = c => ((c.s % L) + L) % L;
+  const zone = (g, d) => { const v = tvg[g] || []; if (!v.length) return -1; let k = v.length - 1; for (let i = 0; i < v.length; i++) if (v[i].from <= d) k = i; return k; };
+  const specs = (o.dynSpecs || []);
+  const arms = {}; for (const t of (o.dynArms || [])) arms[t.id + "|" + t.side] = t;
+  const recent = [];
+  let cur = null, shotNo = 0, lastDefault = -1;
+  const lapAt = k => S[k].lap;
+  const ev = (k, src, sh, cam, extra) => {
+    const t = S[k].t, c = car(k, sh.car), e = Object.assign({ t, w: "", lap: lapAt(k), flag: S[k].flag, car: sh.car, num: String(num(sh.car)), name: who(sh.car), cam: cam.id, base: cam.base, tg: cam.tg == null ? -1 : cam.tg, tn: cam.tn || 0,
+      kind: sh.kind, src, other: sh.other == null ? -1 : sh.other, x: c.x, y: c.y, d: dOf(c) * kLap, best: -1, cur: -1, camName: cam.name, why: sh.why, note: "" }, extra || {});
+    events.push(e); return e;
+  };
+  const tvCam = (g, k, sh) => { const c = car(k, sh.car), z = zone(g, dOf(c)); if (z < 0) return null; return { id: 19 + g, base: 19 + g, tg: g, tn: tvg[g][z].n, name: ["TV1", "TV2", "Spectator"][g] + " camera " + tvg[g][z].n, z }; };
+  let pitRound = 0;      // the director goes round its pit camera list (cam_pit = 17, 18)
+  const pitCam = (k, sh) => { const cs = M.pit || []; if (!cs.length) return null; const b = cs[pitRound++ % cs.length]; return { id: b.cam, base: b.cam, name: b.cam === 17 ? "Pit lane 1" : "Pit lane 2" }; };
+  const onboard = (sh) => { const opts = [[12, "Roof forward"], [13, "Roof"], [10, "Front"], [14, "Right side"]]; const p = opts[Math.floor(rnd() * opts.length)]; return { id: p[0], base: p[0], name: p[1] }; };
+  // ---- dynamic cameras: the same templates and geometry as RaceVision's (from /api/dyn), placed on this map
+  const roleOf = (sh, k) => {
+    if (!o.dyn) return null;
+    if (sh.kind === "INCIDENT") return "crash";
+    if (sh.kind === "RESTART") return "restart";
+    if (sh.kind === "BATTLE" || sh.kind === "PASS") return "battle";
+    if (sh.kind === "PIT") { const c = car(k, sh.car); return c.ph === 2 ? "pit_stall" : c.ph === 3 ? "pit_out" : "pit_in"; }
+    if (sh.kind === "LEADER" && sh.final) return "finish";
+    return null;
+  };
+  const placeDyn = (role, k, sh) => {
+    let cand = specs.filter(t => t.role === role && t.id !== recent[recent.length - 1]);
+    if (!cand.length) cand = specs.filter(t => t.role === role);
+    if (!cand.length) return null;
+    let best = null, bs = -1e9;
+    for (const t of cand) for (const side of [1, -1]) {
+      const a = arms[t.id + "|" + (side > 0 ? "L" : "R")], n = a ? a.n : 0, mean = a && a.score != null ? a.score : .62;
+      let sc = mean + .35 / Math.sqrt(1 + n) + rnd() * .2; if (recent.slice(-3).includes(t.id)) sc -= .3;
+      if ((t.anchor === 1 || t.anchor === 2) && side !== pit.side) sc -= .25;
+      if (sc > bs) { bs = sc; best = { t, side }; }
+    }
+    if (rnd() < .22 && cand.length > 1) { const t = cand[Math.floor(rnd() * cand.length)]; best = { t, side: rnd() < .5 ? 1 : -1 }; }
+    const t = best.t, side = best.side, c = car(k, sh.car), v = Math.max(25, c.v), R = (r) => lerp(r[0], r[1], rnd()), edge = pit.hw + R(t.lat);
+    let camD = dOf(c), x, y, endM = 0;
+    const kk = 1 / kLap;           // game metres -> map metres
+    if (t.anchor === 0) { camD = (dOf(c) + R(t.ahead) * v * kk) % L; [x, y] = G.at(camD, side * edge); endM = t.end * v * kk; }
+    else if (t.anchor === 1) { camD = (pit.inD + R(t.ahead) * kk + L) % L; [x, y] = G.at(camD, side * edge); endM = t.end * kk; }
+    else if (t.anchor === 2) { camD = (pit.outD + R(t.ahead) * kk + L) % L; [x, y] = G.at(camD, side * edge); endM = t.end * kk; }
+    else if (t.anchor === 3) { camD = (R(t.ahead) * kk) % L; [x, y] = G.at(camD, side * edge); endM = t.end * kk; }
+    else if (t.anchor === 4) { const head = Math.atan2(G.Y(Math.round(dOf(c) / L * G.n) + 3) - G.Y(Math.round(dOf(c) / L * G.n) - 3), G.X(Math.round(dOf(c) / L * G.n) + 3) - G.X(Math.round(dOf(c) / L * G.n) - 3)); const br = head + side * lerp(.45, 1.2, rnd()), dist = R(t.ahead) * kk; x = c.x + Math.cos(br) * dist; y = c.y + Math.sin(br) * dist; }
+    else { let sx = c.x, sy = c.y, n = 1; for (let j = 0; j < N; j++) { if (j === sh.car) continue; const q = car(k, j); if ((q.crashed || q.v < 12) && Math.hypot(q.x - c.x, q.y - c.y) < 90) { sx += q.x; sy += q.y; n++; } } sx /= n; sy /= n;
+      const pr = simProject(G, M, sx, sy), i = Math.round(pr.d / L * G.n), tdx = G.X(i + 2) - G.X(i - 2), tdy = G.Y(i + 2) - G.Y(i - 2), base = Math.atan2(tdy, tdx) + side * Math.PI / 2 + (rnd() - .5) * 1.4, dist = R(t.ahead) * kk;
+      x = sx + Math.cos(base) * dist; y = sy + Math.sin(base) * dist; }
+    recent.push(t.id); if (recent.length > 6) recent.shift();
+    const dd = simProject(G, M, x, y).d;
+    return { x, y, fov: R(t.fov), label: "Dynamic Camera - Static: " + t.label + " (" + (side > 0 ? "left" : "right") + " side)", tmpl: t.id, role, camD: t.anchor === 4 || t.anchor === 5 ? dd : camD, endM, hold: lerp(Math.max(2, t.hold * .6), t.hold, rnd()), anchor: t.anchor, yaw: Math.atan2(c.y - y, c.x - x) };
+  };
+  // ---- the shots
+  const shots = [];
+  const incidentUntil = W.marks.crash ? W.marks.crash.t + 12 : -1, kC = W.marks.crash ? Math.round(W.marks.crash.t / dt) : -1;
+  const pickDefault = (k) => { const r = rank(k).filter(i => !car(k, i).crashed && !car(k, i).pit); const slot = (shotNo % 3 === 2 && r.length > 3) ? 2 : 0; lastDefault = r[slot]; return r[slot]; };
+  const finalLapFrom = W.marks.white || 1e9;
+  const prevOrder = {}; let passAt = -9, passCar = -1, passVictim = -1;
+  let battleSince = {}, pitDecisionDone = false;
+  const cand = (k) => {
+    const t = S[k].t, r = rank(k), out = [];
+    if (W.marks.crash && t >= W.marks.crash.t && t < incidentUntil) out.push({ pr: 100, kind: "INCIDENT", car: W.marks.crash.car, hold: 11, why: "spins in the bend" });
+    if (W.marks.green && t >= W.marks.green && t < W.marks.green + 12) out.push({ pr: 90, kind: "RESTART", car: r[0], hold: 12, why: "green flag" });
+    if (t >= finalLapFrom) { const a = r[0], b = r[1]; const gap = (S[k].a[a * 7] - S[k].a[b * 7]) / Math.max(20, S[k].a[b * 7 + 4]);
+      out.push(gap < 1.2 ? { pr: 96, kind: "BATTLE", car: b, other: a, hold: 14, why: "final lap, " + gap.toFixed(2) + "s back", final: true } : { pr: 95, kind: "LEADER", car: a, hold: 14, why: "final lap", final: true }); }
+    // pit road under caution: whoever is in the pits, and the leader coming up to the entry
+    if (W.marks.pitOpen && t >= W.marks.pitOpen - 6 && S[k].flag !== 7) {
+      for (const i of r) { const c = car(k, i); if (c.pit && c.ph > 0) out.push({ pr: [0, 30, 40, 36][c.ph] * (i === r[0] ? 1.4 : 1) + 8, kind: "PIT", car: i, hold: 16, why: ["", "entering pit road", "in the pit stall", "leaving pit road"][c.ph] }); }
+      if (o.dyn && !pitDecisionDone) { const ld = r.find(i => !car(k, i).crashed && !car(k, i).pit); if (ld != null) { const rel = wrapD(pit.inD - dOf(car(k, ld)), L); if (rel > -30 * kLap && rel < 260 / kLap) out.push({ pr: 55, kind: "PIT", car: ld, hold: 11, why: "the pit decision: who comes in, who stays out", decision: true }); } }
+    }
+    // a pass among the front runners
+    for (let p = 0; p < 7 && p + 1 < r.length; p++) {
+      const a = r[p], b = r[p + 1]; const key = a + "-" + b;
+      if (prevOrder[b] !== undefined && prevOrder[a] !== undefined && prevOrder[b] < prevOrder[a] && S[k].flag === 7) { passAt = t; passCar = a; passVictim = b; }
+    }
+    r.forEach((i, p) => prevOrder[i] = p);
+    if (passAt > 0 && t - passAt < 3 && passCar >= 0 && S[k].flag === 7 && !car(k, passCar).pit) out.push({ pr: 65, kind: "PASS", car: passCar, other: passVictim, hold: 9, why: "gets by " + SIM_NAMES[passVictim].split(" ")[1] });
+    // battles: close pairs near the front
+    if (S[k].flag === 7) for (let p = 0; p < 8 && p + 1 < r.length; p++) {
+      const a = r[p], b = r[p + 1], ca = car(k, a), cb = car(k, b); if (ca.pit || cb.pit || ca.crashed || cb.crashed) continue;
+      const gap = (ca.s - cb.s) / Math.max(20, cb.v), key = b + ">" + a;
+      if (gap < .85) { if (battleSince[key] === undefined) battleSince[key] = t; if (t - battleSince[key] > 3) out.push({ pr: 50 * (1.2 - gap * .5) * (p === 0 ? 1.3 : 1), kind: "BATTLE", car: b, other: a, hold: 13, why: gap.toFixed(2) + "s behind " + SIM_NAMES[a].split(" ")[1] }); } else delete battleSince[key];
+    }
+    const ld = r.find(i => !car(k, i).crashed && !car(k, i).pit);
+    if (ld != null) out.push({ pr: 18, kind: "LEADER", car: ld, hold: 10, why: "leads by " + (Math.max(0, (S[k].a[ld * 7] - S[k].a[(r.find(i => i !== ld && !car(k, i).crashed) || ld) * 7]) / Math.max(20, S[k].a[ld * 7 + 4]))).toFixed(1) + "s" });
+    return out.sort((x, y) => y.pr - x.pr);
+  };
+  // camera for the first moment of a shot
+  const open = (k, sh) => {
+    const role = roleOf(sh, k);
+    sh.dynPose = null;
+    if (role && rnd() * 100 < (o.chance == null ? 70 : o.chance) && specs.length) { const p = placeDyn(role, k, sh); if (p) { sh.dynPose = p; sh.dynAt = S[k].t; return { id: 41 + (shotNo % 2), base: 17 + (shotNo % 2), name: p.label, dyn: p }; } }
+    if (sh.kind === "PIT") { const c = pitCam(k, sh); if (c && car(k, sh.car).pit) return c; }
+    const g = sh.kind === "BATTLE" || sh.kind === "PASS" ? (shotNo % 2 ? 0 : 1) : sh.kind === "INCIDENT" ? 2 - (shotNo % 2) * 2 : (shotNo % 3 === 2 ? 1 : 0);
+    return tvCam(sh.kind === "INCIDENT" && !(tvg[g] && tvg[g].length) ? 0 : g, k, sh) || tvCam(0, k, sh) || tvCam(1, k, sh) || onboard(sh);
+  };
+  let camNow = null, camSince = 0, lastTv = -1, lastKind = "";
+  const finishShot = () => {};
+  for (let k = 0; k < S.length; k += 5) {                         // every half second
+    const t = S[k].t, cs = cand(k);
+    if (!cs.length) continue;
+    let sh = cur;
+    const elapsed = cur ? t - cur.t0 : 99;
+    const carGone = cur && (car(k, cur.car).crashed && cur.kind !== "INCIDENT");
+    const pitOver = cur && cur.kind === "PIT" && !cur.decision && !car(k, cur.car).pit && elapsed > 2;
+    const expired = cur && (elapsed >= cur.hold || carGone || pitOver);
+    const top = cs[0];
+    if (!cur || expired || (top.pr > cur.pr * 1.3 + 3 && elapsed > (top.kind === "INCIDENT" ? 1 : 5) && top.kind !== cur.kind) || (top.kind === "PIT" && cur.kind === "PIT" && top.car !== cur.car && !cur.decision && elapsed > 3 && top.pr > cur.pr)) {
+      let pick = top;
+      if (cur && !expired) pick = top;
+      else if (cur && cur.kind === "LEADER" && pick.kind === "LEADER" && pick.car === cur.car) { const alt = cs.find(c => c.kind !== "LEADER" || c.car !== cur.car); if (alt) pick = alt; }
+      if (cur && pick.kind === "LEADER" && pick.car === cur.car && !pick.final) pick = Object.assign({}, pick, { car: pickDefault(k) });
+      if (!cur || pick.car !== cur.car || pick.kind !== cur.kind || expired) {
+        if (cur && cur.dynPose) cur.dynPose = null;
+        shotNo++;
+        cur = Object.assign({ t0: t, k0: k }, pick);
+        if (pick.decision) pitDecisionDone = true;
+        const cam = open(k, cur);
+        camNow = cam; camSince = t; lastTv = cam.tg != null ? cam.tn : -1;
+        const prevPr = sh ? sh.pr : 0;
+        const e = ev(k, events.length ? "cut" : "start", cur, cam, cam.dyn ? { dyn: { x: cam.dyn.x, y: cam.dyn.y, z: 6, yaw: cam.dyn.yaw, fov: cam.dyn.fov } } : null);
+        e.best = pick.pr; e.cur = Math.round(prevPr * .7);
+        if (cam.dyn) e.note = "dynamic camera";
+        continue;
+      }
+    }
+    // inside a shot: the TV camera changes by itself as the car drives on; the pit phases change the camera; follow cameras; dynamic cameras end
+    if (!cur) continue;
+    const c = car(k, cur.car), d = dOf(c);
+    if (cur.kind === "PIT" && !cur.decision) {
+      const ph = c.ph;
+      if (ph !== cur.ph) {
+        cur.ph = ph; const cam = open(k, cur) ; camNow = cam; camSince = t; lastTv = cam.tg != null ? cam.tn : -1;
+        const e = ev(k, "camera", cur, cam, cam.dyn ? { dyn: { x: cam.dyn.x, y: cam.dyn.y, z: 6, yaw: cam.dyn.yaw, fov: cam.dyn.fov } } : null);
+        e.why = "pit road: " + ["back on track", "coming in", "in the stall", "leaving"][ph] + (cam.dyn ? "" : ""); cur.why = ["", "entering pit road", "in the pit stall", "leaving pit road"][ph] || cur.why;
+        continue;
+      }
+    }
+    if (camNow && camNow.dyn) {
+      const p = camNow.dyn, held = t - camSince > p.hold;
+      const ended = held || (p.endM !== 0 && p.anchor <= 3 && wrapD(p.camD - d, L) < -p.endM && t - camSince > 1);
+      if (ended) {
+        const g = shotNo % 2, cam = tvCam(g, k, cur) || tvCam(0, k, cur) || onboard(cur);
+        camNow = cam; camSince = t; lastTv = cam.tg != null ? cam.tn : -1;
+        const e = ev(k, "camera", cur, cam, null); e.why = cur.why; e.note = "dynamic camera ended: " + (held ? "held long enough" : "the car has passed");
+        continue;
+      }
+    } else if (camNow && camNow.tg != null) {
+      const z = zone(camNow.tg, d);
+      if (z >= 0 && tvg[camNow.tg][z].n !== lastTv) {
+        lastTv = tvg[camNow.tg][z].n; const cam = tvCam(camNow.tg, k, cur);
+        camNow = cam; const e = ev(k, "tv", cur, cam, null); e.why = ["TV1", "TV2", "spectator"][cam.tg] + " camera " + cam.tn + " takes over"; e.note = ""; continue;
+      }
+      if (cur.kind !== "PIT" && t - camSince > 9 && t - cur.t0 > 5 && (cur.kind === "LEADER" || cur.kind === "BATTLE" || cur.kind === "PASS") && elapsed < cur.hold - 3) {
+        const cam = onboard(cur); camNow = cam; camSince = t; lastTv = -1;
+        const e = ev(k, "camera", cur, cam, null); e.note = "follow camera (shot " + Math.round(t - cur.t0) + " s old)"; continue;
+      }
+    } else if (camNow && camNow.tg == null && !camNow.dyn && camNow.base !== 17 && camNow.base !== 18 && t - camSince > 6) {
+      const g = shotNo % 2, cam = tvCam(g, k, cur) || tvCam(0, k, cur);
+      if (cam) { camNow = cam; camSince = t; lastTv = cam.tn; const e = ev(k, "camera", cur, cam, null); e.note = "next follow camera"; }
+    }
+  }
+  // flags + positions for the timeline / map
+  const samples = S.map(s => { const p = []; for (let i = 0; i < N; i++) { p.push(i, s.a[i * 7 + 2], s.a[i * 7 + 3]); } return { t: s.t, flag: s.flag, car: -1, cam: -1, p }; });
+  return { events, flags: W.flags, laps: W.laps, samples };
+}
+
+let simWorlds = {};          // the race of each track (the same for every set, so sets can be compared)
+async function startPreview(track, name, keep, title) {
+  let P; try { P = await apiJ("camsets/preview", { track, name }); } catch (e) { toast(e.message); return; }
+  let D = null; try { D = await apiJ("dyn"); } catch (e) {}
+  const M = { track, len: P.len, lap: P.lap, from: P.from, pts: P.pts, tv: P.tv, pit: P.pit };
+  const prev = st.sim;
+  if (!(prev && prev.track === track && keep)) st.sim = null;
+  const sim = { track, name, title: title || name, M, P, D, dyn: prev && keep ? prev.dyn : false, seed: prev && keep ? prev.seed : 1, speed: prev && keep ? prev.speed : 2, playing: true, chance: 75 };
+  buildSim(sim, true);
+}
+function buildSim(sim, fresh) {
+  const G = buildGeo(sim.M), M = sim.M;
+  if (!simWorlds[M.track + "|" + (M.len | 0)]) simWorlds[M.track + "|" + (M.len | 0)] = simRace(M, G, sim.P, sim.D);
+  const W = simWorlds[M.track + "|" + (M.len | 0)];
+  const rec = simDirect(W, M, G, sim.name, { seed: sim.seed * 7919 + hashStr(sim.name), dyn: sim.dyn, chance: sim.chance, dynSpecs: sim.D ? sim.D.templateSpecs : [], dynArms: sim.D ? sim.D.templates : [] });
+  sim.W = W; sim.rec = rec;
+  const cars = {}; for (let i = 0; i < W.N; i++) cars[i] = { num: String(SIM_NUMS[i]), name: SIM_NAMES[i], color: SIM_COLORS[i] };
+  Object.assign(st, { mode: "file", file: "", fileHdr: { track: M.track, session: "preview", started: sim.name }, events: rec.events, samples: rec.samples, flags: rec.flags, laps: rec.laps, cars, map: M,
+                      sessionRace: true, win: 0, pan: 0, selEv: -1, sim, live: null });
+  opt.bands = "active";
+  prepMap();
+  if (geo) {                          // the map frame takes in the dynamic cameras (not the ones very far off)
+    let tx0 = 1e9, tx1 = -1e9, ty0 = 1e9, ty1 = -1e9;
+    for (let i = 0; i < geo.n; i++) { tx0 = Math.min(tx0, geo.X(i)); tx1 = Math.max(tx1, geo.X(i)); ty0 = Math.min(ty0, geo.Y(i)); ty1 = Math.max(ty1, geo.Y(i)); }
+    const mx = (tx1 - tx0) * .4 + 30, my = (ty1 - ty0) * .4 + 30;
+    for (const e of rec.events) if (e.dyn) {
+      geo.box[0] = Math.min(geo.box[0], Math.max(tx0 - mx, e.dyn.x)); geo.box[1] = Math.max(geo.box[1], Math.min(tx1 + mx, e.dyn.x));
+      geo.box[2] = Math.min(geo.box[2], Math.max(ty0 - my, e.dyn.y)); geo.box[3] = Math.max(geo.box[3], Math.min(ty1 + my, e.dyn.y));
+    }
+  }
+  st.scrubT = fresh || sim.t == null ? rec.samples[0].t : Math.min(sim.t, rec.samples[rec.samples.length - 1].t);
+  sim.t = st.scrubT; sim.lastNow = 0;
+  renderEvents(); setZoomButtons(); renderChips(); renderSimBar(); renderOnAirFile.k = "";
+  $("mapNote").style.display = "none"; $("setPrompt").hidden = true;
+}
+function simExit(silent) {
+  if (!st.sim) return;
+  st.sim = null; $("simBar").hidden = true;
+  if (!silent) { backToLive(); }
+}
+function simCars(t) {                // positions at game time t, eased between the 0.1 s samples
+  const S = st.samples; if (!S.length) return [];
+  const f = (t - S[0].t) / .1, i = Math.max(0, Math.min(S.length - 2, Math.floor(f))), u = Math.max(0, Math.min(1, f - i)), a = S[i].p, b = S[i + 1].p, out = [];
+  for (let j = 0; j < a.length; j += 3) {
+    const ax = a[j + 1], ay = a[j + 2], bx = b[j + 1], by = b[j + 2];
+    if (Math.hypot(bx - ax, by - ay) > 80) { out.push({ slot: a[j], x: bx, y: by, pit: false }); continue; }
+    out.push({ slot: a[j], x: lerp(ax, bx, u), y: lerp(ay, by, u), pit: false });
+  }
+  return out;
+}
+function simAdvance(now) {
+  const sim = st.sim; if (!sim) return;
+  if (!sim.lastNow) sim.lastNow = now;
+  const dtw = Math.min(.1, (now - sim.lastNow) / 1000); sim.lastNow = now;
+  const S = st.samples, end = S[S.length - 1].t;
+  if (sim.playing && st.scrubT != null) {
+    let t = st.scrubT + dtw * sim.speed;
+    if (t >= end) t = S[0].t;
+    st.scrubT = t; sim.t = t; st.at = null;
+  }
+  if (st.scrubT != null) sim.t = st.scrubT;
+  const lab = $("simClock"); if (lab) lab.textContent = fmtT(st.scrubT - S[0].t) + " / " + fmtT(end - S[0].t);
+}
+function renderSimBar() {
+  const sim = st.sim, bar = $("simBar"); if (!sim) { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.innerHTML = '<b>Preview</b><span class="scn">' + esc(sim.title || sim.name) + '</span><button class="zb" id="spPlay">' + (sim.playing ? "Pause" : "Play") + "</button>" +
+    [1, 2, 4].map(x => '<button class="zb' + (sim.speed === x ? " on" : "") + '" data-sp="' + x + '">' + x + "&times;</button>").join("") +
+    '<button class="zb" id="spRestart">Restart</button><span class="scn" id="simClock"></span>' +
+    '<button class="zb' + (sim.dyn ? " on" : "") + '" id="spDyn" title="Show dynamic cameras on the same race">Dynamic cameras</button>' +
+    (sim.dyn ? '<button class="zb" id="spShuffle" title="Another race: the same action, different angles">Other angles</button>' : "") +
+    '<button class="sb pri" id="spUse">Use this set</button><button class="zb" id="spExit">Close</button>';
+  $("spPlay").onclick = () => { sim.playing = !sim.playing; renderSimBar(); };
+  bar.querySelectorAll("[data-sp]").forEach(b => b.onclick = () => { sim.speed = +b.dataset.sp; renderSimBar(); });
+  $("spRestart").onclick = () => { st.scrubT = st.samples[0].t; sim.playing = true; renderSimBar(); };
+  $("spDyn").onclick = () => { if (!sim.D || !sim.D.templateSpecs || !sim.D.templateSpecs.length) { toast("RaceVision's dynamic camera templates aren't available."); return; } sim.dyn = !sim.dyn; sim.seed++; buildSim(sim, false); };
+  const sh = $("spShuffle"); if (sh) sh.onclick = () => { sim.seed++; buildSim(sim, false); };
+  $("spUse").onclick = () => { const t = sim.track, n = sim.name; simExit(false); openSets(t).then(() => toast("Choose Use now or Save for the next session for \"" + n + "\".")); };
+  $("spExit").onclick = () => simExit(false);
+}
+
+// ---------------------------------------------------------------- loop
+function frame(now) {
+  try { simAdvance(now); } catch (e) { console.error(e); }
+  try { drawMap(now); } catch (e) { console.error(e); }
+  try { drawTimeline(); } catch (e) { console.error(e); }
+  if (st.mode === "file") renderOnAirFile();
+  setZoomButtons();
+  requestAnimationFrame(frame);
+}
+function renderOnAirFile() {
+  if (st.scrubT == null) return;
+  const key = st.scrubT.toFixed(1); if (renderOnAirFile.k === key) return; renderOnAirFile.k = key;
+  const sh = shotAt(st.scrubT); renderChips();
+  $("oaRate").classList.remove("show");
+  if (!sh) return;
+  const e = sh.e, info = st.cars[e.car] || {}, kind = e.src === "replay" ? "REPLAY" : e.kind;
+  $("oaLbl").firstChild.textContent = "On air then ";
+  setWho(e.car >= 0 ? info.num || e.num : null, KIND_COL[kind] || "#ffc400");
+  $("oaName").textContent = info.name || e.name || "-";
+  $("oaSub").innerHTML = '<span class="tag" style="background:' + (KIND_COL[kind] || "#888") + '">' + esc(kind) + "</span>";
+  $("oaWhy").textContent = sh.cut.why || "";
+  $("oaCam").textContent = e.camName || "-"; $("oaCam").style.color = famE(e).c;
+  $("oaTv").textContent = e.tg >= 0 ? GROUP_NAME[e.tg] + " camera " + e.tn : "-"; $("oaTvL").textContent = "TV camera"; $("oaTvBar").style.width = "0";
+  $("oaAge").textContent = "at " + fmtT(st.scrubT - tl0()) + (e.lap ? " · lap " + e.lap : "");
+  $("oaWait").classList.remove("show");
+}
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "Escape") { closeDrawer(); if (st.mode === "live") backToLive(); }
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") { const t = st.scrubT != null ? st.scrubT : tlNow(); scrubTo(t + (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 10 : 2)); }
+});
+renderLayers(); renderEvents(); setZoomButtons();
+if (!KEY) noteErr(new Error("not paired"));
+pollLive(); pollEvents(); pollMap();
+if (qs.get("file")) openFile(qs.get("file"));
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

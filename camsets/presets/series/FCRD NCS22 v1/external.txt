@@ -1,0 +1,12 @@
+# RaceVision camera set - FCRD NCS22 v1, external (car_external: Outside the car, fixed to it (it moves with the car, like a TV car-to-car shot): right side = low front quarter on the right, looking back at the car; left side = rear quarter on the left, higher, looking forward at it. Bumpers, the third camera and the roof stay.)
+kind = car
+# the 6 car cameras in file order; x forward, y left, z up (m); yaw + = turned left; fov radians
+version = 0
+[CAR]
+cam x=1.7999999523162842 y=0.0 z=0.18799999356269836 yaw=0.0 pitch=0.003490658476948738 roll=0.0 fov=1.3611822128295898 u7=0.0 u8=-0.12496557086706161   # front bumper
+cam x=-2.4000000953674316 y=0.0 z=0.2199999988079071 yaw=3.1415927410125732 pitch=0.06981316953897476 roll=0.0872664600610733 fov=1.3611822128295898 u7=0.0 u8=-0.12496557086706161   # rear bumper
+cam x=-0.39858418703079224 y=-0.28212058544158936 z=0.3726694881916046 yaw=0.0 pitch=0.0 roll=0.0 fov=1.3612569570541382 u7=0.0 u8=-0.125   # third
+cam x=-0.4480000138282776 y=-0.09600000083446503 z=1.100000023841858 yaw=0.0 pitch=0.0 roll=0.0 fov=1.3611822128295898 u7=0.0 u8=-0.12496557086706161   # roof
+cam x=3.200000047683716 y=-2.4000000953674316 z=0.550000011920929 yaw=2.498091459274292 pitch=-0.012499349191784859 roll=0.0 fov=1.0 u7=0.0 u8=-0.12496557086706161   # right side
+cam x=-4.0 y=2.200000047683716 z=1.2999999523162842 yaw=-0.5028432011604309 pitch=0.1521526724100113 roll=0.0 fov=0.949999988079071 u7=0.0 u8=-0.12496557086706161   # left side
+extra = 

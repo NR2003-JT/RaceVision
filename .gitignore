@@ -1,0 +1,22 @@
+# Running copy, builds, release staging
+/app/
+/beta/
+/release/
+# Local notes (personal)
+CLAUDE.md
+BUILD LIST.md
+# Camera sets: what a user picks on their own machine
+camsets/car_series.txt
+# Claude edit backups
+*.before-claude-*
+__pycache__/
+*.pyc
+*.log
+# Game files copied on first use, and per-machine picks
+/camsets/stock/
+/bin/
+*.res
+*.obj
+*.exe
+*.zip
+.vs/

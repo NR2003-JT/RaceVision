@@ -1,0 +1,7 @@
+// the exe's icon (Explorer, taskbar, the window) and the logo (window header, phone page)
+1 ICON "racevision.ico"
+102 RCDATA "racevision_logo.png"
+// the phone page, served by racevision_remote.cpp (PageHtml)
+101 RCDATA "racevision_phone.html"
+// the director view (/director): live camera map + timeline of the cuts
+103 RCDATA "racevision_director.html"

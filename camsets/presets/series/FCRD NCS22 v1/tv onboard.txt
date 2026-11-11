@@ -1,0 +1,12 @@
+# RaceVision camera set - FCRD NCS22 v1, tv onboard (car_tv_onboard: Onboards that show the car: right side = door cam high on the right of the car, turned in so the door, hood and right front tyre are in the picture; left side = roof cam on the front of the roof looking back down the roof and rear deck at the cars behind.)
+kind = car
+# the 6 car cameras in file order; x forward, y left, z up (m); yaw + = turned left; fov radians
+version = 0
+[CAR]
+cam x=1.7999999523162842 y=0.0 z=0.18799999356269836 yaw=0.0 pitch=0.003490658476948738 roll=0.0 fov=1.3611822128295898 u7=0.0 u8=-0.12496557086706161   # front bumper
+cam x=-2.4000000953674316 y=0.0 z=0.2199999988079071 yaw=3.1415927410125732 pitch=0.06981316953897476 roll=0.0872664600610733 fov=1.3611822128295898 u7=0.0 u8=-0.12496557086706161   # rear bumper
+cam x=-0.39858418703079224 y=-0.28212058544158936 z=0.3726694881916046 yaw=0.0 pitch=0.0 roll=0.0 fov=1.3612569570541382 u7=0.0 u8=-0.125   # third
+cam x=-0.4480000138282776 y=-0.09600000083446503 z=1.100000023841858 yaw=0.0 pitch=0.0 roll=0.0 fov=1.3611822128295898 u7=0.0 u8=-0.12496557086706161   # roof
+cam x=-0.8999999761581421 y=-1.100000023841858 z=0.9500000476837158 yaw=0.20000000298023224 pitch=0.07999999821186066 roll=0.0 fov=1.2000000476837158 u7=0.0 u8=-0.12496557086706161   # right side
+cam x=-0.09800001233816147 y=0.0 z=1.2000000476837158 yaw=3.1415927410125732 pitch=0.18000000715255737 roll=0.0 fov=1.25 u7=0.0 u8=-0.12496557086706161   # left side
+extra = 

@@ -1,0 +1,1447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0c10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RaceVision">
+<link rel="apple-touch-icon" href="/icon512.png">
+<link rel="icon" href="/icon.png">
+<link id="manifest" rel="manifest" href="/manifest.json">
+<title>RaceVision</title>
+<!-- RaceVision phone remote: served by RaceVision itself (racevision_remote.cpp), built into the exe -->
+<style>
+:root {
+  --bg: #111318; --side: #0b0c10; --card: #1a1d24; --card2: #22262f; --input: #0c0e12; --line: #323742;
+  --text: #eceff4; --muted: #868fa0; --gold: #ffc400; --green: #46c878; --red: #eb554b; --teal: #3cc8c8;
+  --cond: "Bahnschrift SemiBold Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { padding-bottom: calc(68px + env(safe-area-inset-bottom)); overscroll-behavior-y: contain; }
+button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+input { font: inherit; }
+
+header { position: sticky; top: 0; z-index: 5; background: var(--side); padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+  border-bottom: 1px solid #1e2128; }
+.top { display: flex; align-items: center; gap: 10px; }
+.mark { font: 700 24px/1 var(--cond); letter-spacing: .5px; font-stretch: condensed; display: flex; align-items: center; gap: 8px; }
+.mark img { width: 36px; height: 36px; margin: -6px 0; }
+.mark b { color: var(--gold); font-weight: 700; }
+.status { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.green { background: var(--green); } .dot.gold { background: var(--gold); } .dot.red { background: var(--red); }
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.ctl { background: #22262f; border-radius: 10px; height: 40px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.ctl.on { background: var(--gold); color: #0c0e12; }
+/* AIMOD's scanner: listen button, "phone only" switch, and who's on the air */
+.scan { display: none; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+.scan.show { display: grid; }
+.scan .ctl { padding: 0 12px; }
+.scan .ctl small { font-weight: 500; font-size: 12.5px; opacity: .75; }
+.scan .ctl.na { color: var(--muted); }
+.ponly { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); background: #22262f; border-radius: 10px; padding: 0 8px 0 10px; }
+.ponly .sw { width: 42px; height: 24px; }
+.ponly .sw::after { width: 18px; height: 18px; }
+.ponly .sw.on::after { left: 21px; }
+.hear { display: none; align-items: center; gap: 6px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.hear.show { display: flex; }
+.hear button { flex: 1; height: 32px; border-radius: 9px; background: #22262f; font-size: 13px; font-weight: 600; }
+.hear button.on { background: var(--gold); color: #0c0e12; }
+.onair { display: none; align-items: center; gap: 10px; margin-top: 8px; padding: 6px 10px; border-radius: 10px; background: #1d2a22; }
+.onair.show { display: flex; }
+.onair .who { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.onair .who small { display: block; color: var(--green); font: 700 11.5px var(--cond); letter-spacing: .8px; }
+.bars { display: flex; gap: 3px; align-items: flex-end; height: 18px; flex: none; }
+.bars i { width: 4px; background: var(--green); border-radius: 2px; animation: talk .5s ease-in-out infinite alternate; }
+.bars i:nth-child(2) { animation-delay: .15s; } .bars i:nth-child(3) { animation-delay: .3s; }
+@keyframes talk { from { height: 4px; } to { height: 18px; } }
+
+.banner { display: none; margin: 12px 16px 0; padding: 12px 14px; border-radius: 10px; background: #3a1d1b; color: #ffd5d0; font-size: 14px; }
+.banner.show { display: block; }
+
+#ontv { margin: 12px 16px 0; background: var(--card); border-radius: 14px; padding: 14px; }
+.ontv-head { display: flex; justify-content: space-between; font: 600 12px var(--cond); letter-spacing: 1px; color: var(--muted); }
+.ontv-main { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.num { flex: none; min-width: 44px; height: 32px; padding: 0 6px; border-radius: 6px; background: var(--line); display: flex; align-items: center;
+  justify-content: center; font: 700 18px var(--cond); }
+.num.big { min-width: 58px; height: 42px; font-size: 24px; border-radius: 8px; }
+/* the series art: number cards, headshots in a ring of the team colour, the series logo */
+.numart { flex: none; width: 44px; height: 32px; object-fit: contain; }
+.numart.big { width: 60px; height: 44px; }
+.head { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--line); background: #2a2f3a; overflow: hidden; position: relative; }
+.head img { position: absolute; left: -30%; top: 0; width: 160%; }
+.head.big { width: 72px; height: 72px; border-width: 3px; }
+.ontv-art { display: flex; align-items: center; gap: 10px; flex: none; }
+h2 .logo { float: right; height: 22px; margin-top: -4px; }
+.ontv-name { font: 700 21px/1.15 var(--cond); }
+.ontv-why { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.manual { display: none; margin-top: 12px; align-items: center; gap: 10px; background: #2c2610; border-radius: 10px; padding: 8px 8px 8px 12px; color: var(--gold); font-size: 14px; font-weight: 600; }
+.manual.show { display: flex; }
+.manual button { margin-left: auto; background: var(--gold); color: #0c0e12; border-radius: 8px; padding: 8px 14px; font-weight: 700; }
+
+main { padding: 12px 16px 16px; }
+.panel { display: none; }
+.panel.show { display: block; }
+h2 { font: 600 13px var(--cond); letter-spacing: 1.2px; color: var(--gold); margin: 14px 0 8px; text-transform: uppercase; }
+h2:first-child { margin-top: 2px; }
+.hint { color: var(--muted); font-size: 13px; margin: -2px 0 10px; }
+.empty { color: var(--muted); text-align: center; padding: 36px 12px; background: var(--card); border-radius: 12px; }
+
+.list { background: var(--card); border-radius: 12px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 0 12px; min-height: 50px; border-top: 1px solid #23262e; }
+.row:first-child { border-top: 0; }
+.row:active, .row.sent { background: #2a2f3a; }
+.row.tv { background: #3a3212; }
+.pos { width: 24px; text-align: right; color: var(--muted); font: 600 15px var(--cond); flex: none; }
+.pos.p1 { color: var(--gold); }
+.name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.why { display: block; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag { font: 700 11.5px var(--cond); letter-spacing: .8px; padding: 3px 6px; border-radius: 5px; flex: none; }
+.tag.tv { background: var(--gold); color: #0c0e12; }
+.tag.pit { color: var(--teal); border: 1px solid #2b6b6b; }
+.kind { font: 700 11px var(--cond); letter-spacing: .8px; width: 66px; flex: none; color: var(--muted); }
+.kind.INCIDENT { color: var(--red); } .kind.BATTLE, .kind.PASS { color: var(--gold); } .kind.PIT { color: var(--teal); }
+.kind.LEADER, .kind.RESTART { color: var(--green); }
+
+.ce { background: var(--card); border-radius: 12px; padding: 10px 12px; margin-top: 12px; }
+.ce-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ce-head b { font: 700 16px var(--cond); } .ce-head span { color: var(--muted); font-size: 12px; }
+.ce-vals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 8px; margin: 8px 0; font-size: 12px; color: var(--muted); }
+.ce-vals b { color: var(--text); font-weight: 600; }
+.ce-speed { display: flex; gap: 6px; margin-bottom: 8px; } .ce-speed button { flex: 1; padding: 7px; border-radius: 8px; background: #2b303b; font-weight: 600; font-size: 13px; }
+.ce-speed button.on { background: var(--gold); color: #0c0e12; }
+.ce-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ce-grid button, .ce-row button { background: #2b303b; border-radius: 10px; min-height: 48px; font: 700 18px var(--cond); touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.ce-grid button:active, .ce-row button:active, .ce-grid button.held, .ce-row button.held { background: var(--gold); color: #0c0e12; }
+.ce-grid small, .ce-row small { display: block; font: 600 10px var(--cond); color: var(--muted); letter-spacing: .5px; }
+.ce-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+.ce-pad { margin-top: 8px; height: 170px; border-radius: 12px; background: repeating-linear-gradient(0deg, #1b1e25 0 23px, #232733 23px 24px), #1b1e25;
+  border: 1px solid #2b303b; touch-action: none; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+.ce-pad.drag { border-color: var(--gold); }
+.ce-act { display: flex; gap: 6px; margin-top: 8px; } .ce-act button { flex: 1; padding: 10px; border-radius: 8px; background: #2b303b; font-weight: 600; font-size: 13px; }
+.ce-act button.gold { background: var(--gold); color: #0c0e12; }
+.ce-drone { margin-top: 8px; }
+.ce-stick { position: relative; height: 210px; border-radius: 12px; border: 1px solid var(--line); touch-action: none; user-select: none; -webkit-user-select: none;
+  background: radial-gradient(circle at 50% 50%, #2b303b 0 34px, transparent 35px), linear-gradient(#1b1e25, #1b1e25); }
+.ce-stick::before, .ce-stick::after { content: ""; position: absolute; background: #2b303b; }
+.ce-stick::before { left: 50%; top: 12px; bottom: 12px; width: 1px; } .ce-stick::after { top: 50%; left: 12px; right: 12px; height: 1px; }
+.ce-stick.drag { border-color: var(--gold); }
+.ce-knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: var(--gold); z-index: 1;
+  box-shadow: 0 2px 10px #0008; transition: transform .15s; }
+.ce-stick.drag .ce-knob { transition: none; }
+.ce-stick span { position: absolute; font: 600 10px var(--cond); color: var(--muted); letter-spacing: .5px; }
+.ce-drone label { display: block; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.ce-drone label b { color: var(--text); float: right; }
+.ce-drone input[type=range] { width: 100%; margin-top: 6px; accent-color: var(--gold); }
+.ce-why { color: var(--muted); font-size: 13px; padding: 8px 0; }
+.rp-now { display: flex; gap: 8px; margin-bottom: 10px; }
+.rp-now .btn { flex: 1; padding: 11px; }
+.kind.worthy { color: var(--red); } .kind.seen { color: var(--muted); }
+.cams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cam { background: var(--card); border-radius: 12px; min-height: 66px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; border: 2px solid transparent; }
+.cam .n { font: 700 22px/1 var(--cond); }
+.cam .l { font-size: 12px; color: var(--muted); text-align: center; }
+.cam.ob { border-color: #5c4a10; }
+.cam.cur { background: var(--gold); color: #0c0e12; border-color: var(--gold); }
+.cam.cur .l { color: #3b3000; }
+.cam:active, .cam.sent { background: #2a2f3a; }
+.cam { position: relative; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.cam.hid { opacity: .45; border-style: dashed; border-color: #3a404c; }
+.cam.inl { border-color: var(--teal, #3cc8c8); }
+.cam .pos { position: absolute; top: 4px; right: 6px; font: 700 12px var(--cond); color: var(--teal, #3cc8c8); }
+.cam .ced { display: flex; gap: 4px; margin-top: 4px; }
+.cam .ced i { font-style: normal; background: #2b303b; border-radius: 6px; padding: 3px 7px; font: 700 13px var(--cond); color: var(--text, #e8eaee); }
+.camtools { display: flex; gap: 6px; margin: 0 0 10px; flex-wrap: wrap; }
+.camtools .btn { padding: 7px 12px; font-size: 13px; }
+.camtools .btn.on { background: var(--gold); color: #0c0e12; }
+.cl { background: var(--card); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.cl select { width: 100%; background: #2b303b; color: inherit; border: 0; border-radius: 8px; padding: 10px; font: inherit; }
+.clnow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.clc { display: inline-flex; align-items: center; gap: 2px; background: #2b303b; border-radius: 8px; padding: 2px; font-size: 13px; }
+.clc span { padding: 0 6px; } .clc b { padding: 5px 7px; cursor: pointer; color: var(--muted); }
+.camchips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.camchips span { background: #2b303b; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+
+.card { background: var(--card); border-radius: 12px; padding: 4px 14px; margin-bottom: 10px; }
+.field { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid #23262e; }
+.field:first-child { border-top: 0; }
+.field .txt { flex: 1; min-width: 0; }
+.field .lab { font-weight: 600; font-size: 14.5px; }
+.field .help { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.field.wide { flex-wrap: wrap; }
+.field.wide .txt { flex-basis: 100%; }
+.field.wide input[type=text] { width: 100%; }
+.field input[type=text] { width: 84px; background: var(--input); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; }
+.field input[type=text]:focus { outline: none; border-color: var(--gold); }
+.field input.bad { border-color: var(--red); }
+.field input.ok { border-color: var(--green); }
+.sw { width: 50px; height: 28px; border-radius: 14px; background: var(--line); position: relative; flex: none; transition: background .15s; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #aab0be; transition: left .15s; }
+.sw.on { background: var(--gold); }
+.sw.on::after { left: 25px; background: var(--input); }
+.seg { display: flex; background: var(--input); border: 1px solid var(--line); border-radius: 8px; padding: 3px; flex: none; }
+.seg button { padding: 6px 12px; border-radius: 6px; color: var(--muted); font-weight: 600; font-size: 14px; }
+.seg button.on { background: var(--gold); color: #0c0e12; }
+input[type=color] { width: 54px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--input); padding: 3px; flex: none; }
+details.page { background: var(--card); border-radius: 12px; margin-bottom: 10px; }
+details.page summary { list-style: none; padding: 14px; font-weight: 700; display: flex; justify-content: space-between; }
+details.page summary::-webkit-details-marker { display: none; }
+details.page summary::after { content: "+"; color: var(--muted); font-weight: 400; }
+details.page[open] summary::after { content: "\2013"; }
+details.page .inner { padding: 0 14px 4px; }
+.preset { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid #23262e; }
+.preset:first-child { border-top: 0; }
+.preset .name small { display: block; color: var(--muted); font-size: 12.5px; }
+.preset .name small.use { color: var(--gold); }
+.btn { background: #2b303b; border-radius: 8px; padding: 8px 14px; font-weight: 600; flex: none; }
+.btn.gold { background: var(--gold); color: #0c0e12; }
+.btn.wide { width: 100%; margin: 6px 0 10px; padding: 11px; }
+
+nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: var(--side); border-top: 1px solid #1e2128;
+  display: grid; grid-template-columns: repeat(5, 1fr); padding-bottom: env(safe-area-inset-bottom); }
+nav.five { grid-template-columns: repeat(6, 1fr); }
+nav button.crewtab { display: none; }
+nav.five button.crewtab { display: flex; }
+nav button { height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: 12px; font-weight: 600; }
+nav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav button.on { color: var(--gold); }
+
+#toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); opacity: 0;
+  background: #2b303b; color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 14px; transition: all .2s; pointer-events: none;
+  max-width: calc(100% - 32px); z-index: 9; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+#toast.show { opacity: 1; transform: translateX(-50%); }
+#toast.err { background: #5a2420; }
+
+/* pairing: shown instead of everything else until the phone has a working code */
+#pair { display: none; padding: calc(48px + env(safe-area-inset-top)) 24px 24px; text-align: center; }
+body.pairing #pair { display: block; }
+body.pairing header, body.pairing #ontv, body.pairing main, body.pairing nav, body.pairing .banner { display: none; }
+body.pairing { padding-bottom: 0; }
+#pair .mark { font-size: 40px; flex-direction: column; gap: 14px; }
+#pair .mark img { width: 168px; height: 168px; margin: 0; }
+#pair p { color: var(--muted); margin: 18px 0; }
+#pair p b { color: var(--text); }
+#pcode { width: 100%; max-width: 280px; text-align: center; font: 700 30px var(--cond); letter-spacing: 4px; background: var(--input); color: var(--gold);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-transform: lowercase; }
+#pcode:focus { outline: none; border-color: var(--gold); }
+#pair .btn { max-width: 280px; margin: 14px auto 0; display: block; }
+#perr { color: var(--red) !important; min-height: 1.4em; }
+/* crew chief (beta, read-only): one car as its crew chief sees it */
+.beta { font: 700 10px var(--cond); letter-spacing: 1px; color: #0c0e12; background: var(--teal); border-radius: 4px; padding: 2px 5px; vertical-align: 2px; margin-left: 6px; }
+#crewcar { width: 100%; background: var(--input); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; margin-bottom: 10px; }
+.cc-head { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.cc-head .nm { font: 700 19px/1.15 var(--cond); }
+.cc-head .sub { color: var(--muted); font-size: 13px; }
+.cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.cc-card { background: var(--card); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.cc-card.wide { grid-column: 1 / -1; }
+.cc-card h3 { margin: 0 0 6px; font: 600 11.5px var(--cond); letter-spacing: 1px; color: var(--muted); }
+.cc-big { font: 700 24px/1.1 var(--cond); }
+.cc-small { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.cc-bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.cc-bar i { display: block; height: 100%; background: var(--green); }
+.cc-tires { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cc-tire { border-radius: 8px; padding: 6px; text-align: center; font: 700 16px var(--cond); background: #23402c; }
+.cc-tire small { display: block; font: 500 10.5px system-ui; color: var(--muted); }
+.cc-tire.mid { background: #4a3d12; } .cc-tire.hot { background: #5a2420; }
+.cc-laps { display: flex; flex-wrap: wrap; gap: 4px 10px; font: 600 14px var(--cond); }
+.cc-laps .best { color: var(--green); }
+.cc-good { color: var(--green); } .cc-warn { color: var(--gold); } .cc-bad { color: var(--red); }
+.cc-radio { font-size: 13px; line-height: 1.45; color: #cfd5df; }
+.cc-radio div { border-top: 1px solid #23262e; padding: 4px 0; } .cc-radio div:first-child { border-top: 0; }
+.cc-box { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.cc-box.mine { border: 2px solid var(--teal); }
+.cc-box.call { border: 2px solid var(--gold); }
+.cc-row { display: flex; align-items: center; gap: 10px; }
+.cc-row .grow { flex: 1; min-width: 0; }
+.cc-callbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.cc-callbtns button { height: 54px; border-radius: 10px; font: 700 20px var(--cond); background: #2b303b; }
+.cc-callbtns button.pit.on { background: var(--gold); color: #0c0e12; }
+.cc-callbtns button.stay.on { background: var(--teal); color: #0c0e12; }
+.cc-opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.cc-opts button { padding: 7px 10px; border-radius: 8px; background: var(--input); border: 1px solid var(--line); font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.cc-opts button.on { background: var(--gold); color: #0c0e12; border-color: var(--gold); }
+.cc-label { font: 600 11.5px var(--cond); letter-spacing: 1px; color: var(--muted); margin-top: 6px; }
+.cc-status { margin-top: 8px; font-size: 13.5px; }
+.cc-count { font: 700 18px var(--cond); color: var(--gold); }
+.cc-step { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.cc-step button { width: 44px; height: 44px; border-radius: 10px; background: #2b303b; font: 700 22px var(--cond); }
+.cc-step .lap { flex: 1; text-align: center; font: 700 26px var(--cond); }
+.cc-step .lap small { display: block; font: 500 11.5px system-ui; color: var(--muted); }
+.cc-adj { display: grid; grid-template-columns: 1fr 40px 74px 40px; align-items: center; gap: 6px; margin: 6px 0; }
+.cc-adj button { height: 38px; border-radius: 9px; background: #2b303b; font: 700 20px var(--cond); }
+.cc-adj .v { text-align: center; font: 700 17px var(--cond); }
+.cc-adj .v.zero { color: var(--muted); }
+.cc-adj .k small { display: block; font-size: 11px; color: var(--muted); }
+.cc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.cc-actions button { height: 46px; border-radius: 10px; font-weight: 700; background: #2b303b; }
+.cc-actions button.gold { background: var(--gold); color: #0c0e12; }
+.cc-actions button.wide { grid-column: 1 / -1; background: none; color: var(--muted); height: 34px; font-weight: 600; }
+
+/* playback transport (Replays tab) */
+.tp { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+.tp-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.tp-speed { font-family: var(--cond); font-size: 22px; letter-spacing: .04em; color: var(--gold); }
+.tp-speed.live { color: var(--green); }
+.tp-pos { color: var(--muted); font-size: 13px; text-align: right; }
+.tp-bar { position: relative; padding: 14px 0 6px; }
+.tp-marks { position: absolute; left: 0; right: 0; top: 4px; height: 14px; pointer-events: none; }
+.tp-marks i { position: absolute; top: 0; width: 2px; height: 8px; background: #5b6272; }
+.tp-marks i.f { background: var(--gold); }
+.tp-marks i.c { background: var(--red); width: 3px; height: 14px; }
+.tp input[type=range] { width: 100%; margin: 0; accent-color: var(--gold); }
+.tp-row { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
+.tp-row .btn { flex: 1 1 0; padding: 11px 4px; font-size: 14px; text-align: center; min-width: 0; }
+.tp-row .btn.on { background: var(--gold); color: #0c0e12; }
+.tp-chips .btn { padding: 9px 2px; font-size: 13px; }
+.tp-sl { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; margin: 6px 0; }
+.tp-sl input { flex: 1; }
+.tp-sl b { color: var(--text); min-width: 46px; text-align: right; }
+.tp-lap { display: flex; gap: 6px; align-items: center; }
+.tp-lap input[type=number] { width: 70px; background: var(--input); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 9px; font-size: 15px; }
+.tp-lap .btn { padding: 10px 12px; font-size: 14px; }
+.tp-note { color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 4px; }
+.tp.off .tp-row .btn, .tp.off input { opacity: .45; }
+</style>
+</head>
+<body>
+<section id="pair">
+  <div class="mark"><img src="/logo.png" alt=""><span>RACE<b>VISION</b></span></div>
+  <p id="pwhy">Pair this phone with RaceVision.</p>
+  <p>On the PC, open RaceVision's <b>Phone</b> page and type the <b>pairing code</b> shown under the QR code.</p>
+  <input id="pcode" maxlength="9" placeholder="abcd 1234" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+  <button class="btn gold wide" id="bpair">Pair</button>
+  <p id="perr"></p>
+  <p>Added to the home screen? Just type the new code here: the icon keeps working.</p>
+  <button class="btn wide" id="bpaircancel" hidden>Cancel</button>
+</section>
+<header>
+  <div class="top">
+    <div class="mark"><img src="/logo.png" alt=""><span>RACE<b>VISION</b></span></div>
+    <div class="status"><span class="dot" id="sdot"></span><span id="stext">Connecting...</span></div>
+  </div>
+  <div class="controls">
+    <button class="ctl" id="bpause">Pause directing</button>
+    <button class="ctl" id="bover"><span class="dot" id="odot"></span><span id="otext">Overlays</span></button>
+  </div>
+  <div class="scan" id="scan">
+    <button class="ctl" id="bscan"><span class="dot" id="scdot"></span><span id="sctext">Scanner</span></button>
+    <div class="ponly">Phone only<button class="sw" id="bponly" aria-label="Phone only: the PC stays quiet"></button></div>
+  </div>
+  <div class="hear" id="hear"><span>Hear</span><button data-h="car">My car</button><button data-h="team">+ Teammates</button><button data-h="all">Everything</button></div>
+  <div class="onair" id="onair"></div>
+</header>
+
+<div class="banner" id="banner"></div>
+
+<section id="ontv">
+  <div class="ontv-head"><span>ON TV</span><span id="camname"></span></div>
+  <div class="ontv-main">
+    <div class="ontv-art" id="onart"><div class="num big">-</div></div>
+    <div style="min-width:0">
+      <div class="ontv-name" id="onname">Waiting for NR2003</div>
+      <div class="ontv-why" id="onwhy"></div>
+    </div>
+  </div>
+  <div class="manual" id="manual"><span id="mantext">You're directing</span><button id="bauto">Back to auto</button></div>
+</section>
+
+<main>
+  <div class="panel show" id="p-field">
+    <h2>Running order<img class="logo" id="slogo" alt="" hidden></h2>
+    <div class="hint">Tap a car to put it on TV. The director waits a while, then takes over again.</div>
+    <div id="field"></div>
+  </div>
+  <div class="panel" id="p-cams">
+    <h2>Cameras</h2>
+    <div class="camtools"><button class="btn" id="bcedit">Edit</button><button class="btn" id="bchid">Show hidden</button></div>
+    <div class="hint" id="camhint">Tap to cut to a camera. Gold edge = on board (gets the in-car dash).</div>
+    <div class="cl"><select id="clsel"></select><div class="clnow" id="clnow"></div></div>
+    <div class="cams" id="cams"></div>
+    <div class="ce" id="ce">
+      <div class="ce-head"><b id="ce-name">Adjust the camera on screen</b><span id="ce-state"></span></div>
+      <div id="ce-why" class="ce-why"></div>
+      <div id="ce-body">
+        <div class="ce-vals" id="ce-vals"></div>
+        <div class="ce-speed" id="ce-speed"><button data-sp="0.25">Fine</button><button data-sp="1" class="on">Normal</button><button data-sp="4">Fast</button></div>
+        <div class="ce-grid">
+          <button data-mv="turn,1"><small>TURN</small>&#8630;</button><button data-mv="f,1"><small>FORWARD</small>&#9650;</button><button data-mv="turn,-1"><small>TURN</small>&#8631;</button>
+          <button data-mv="s,1"><small>LEFT</small>&#9664;</button><button data-mv="f,-1"><small>BACK</small>&#9660;</button><button data-mv="s,-1"><small>RIGHT</small>&#9654;</button>
+        </div>
+        <div class="ce-row">
+          <button data-mv="u,1"><small>UP</small>&#8679;</button><button data-mv="u,-1"><small>DOWN</small>&#8681;</button>
+          <button data-nd="4,-1"><small>TILT</small>up</button><button data-nd="4,1"><small>TILT</small>down</button>
+          <button data-nd="5,-1"><small>ROLL</small>&#10226;</button><button data-nd="5,1"><small>ROLL</small>&#10227;</button>
+          <button data-nd="6,-1"><small>LENS</small>zoom in</button><button data-nd="6,1"><small>LENS</small>wide</button>
+        </div>
+        <div class="ce-pad" id="ce-pad">Drag here to look around</div>
+        <div class="ce-drone" id="ce-drone" hidden>
+          <div class="ce-stick" id="ce-stick"><div class="ce-knob" id="ce-knob"></div>
+            <span style="left:50%;top:6px;transform:translateX(-50%)">CLIMB</span><span style="left:50%;bottom:6px;transform:translateX(-50%)">DROP</span>
+            <span style="left:8px;top:50%;transform:translateY(-50%)">CLOSER</span><span style="right:8px;top:50%;transform:translateY(-50%)">FARTHER</span></div>
+          <label>Trail distance <b id="dr-distv"></b></label>
+          <label>Top speed <b id="dr-topv"></b><input type="range" id="dr-top" min="100" max="300" step="5"></label>
+          <label>Holds still within <b id="dr-hovv"></b><input type="range" id="dr-hov" min="0" max="80" step="1"></label>
+        </div>
+        <div class="ce-act"><button class="gold" id="ce-save">Save</button><button id="ce-reset">Reset</button><button id="ce-new">New camera from this</button></div>
+        <div class="ce-act"><button id="ce-del" hidden>Delete this camera</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="p-story">
+    <h2>What the director sees</h2>
+    <div class="hint">The best shots right now, best first. Tap one to put that car on TV.</div>
+    <button class="btn wide" id="bdirector">Director view: live camera map + timeline of the cuts</button>
+    <div id="story"></div>
+  </div>
+  <div class="panel" id="p-replays">
+    <h2>Replays</h2>
+    <div class="tp" id="tp">
+      <div class="tp-top"><span class="tp-speed live" id="tpSpeed">LIVE</span><span class="tp-pos" id="tpPos"></span></div>
+      <div class="tp-bar"><div class="tp-marks" id="tpMarks"></div><input type="range" id="tpSeek" min="0" max="1000" value="1000"></div>
+      <div class="tp-row">
+        <button class="btn" data-tp="start">|&lt; Start</button>
+        <button class="btn" data-tp="back">&lt; Frame</button>
+        <button class="btn gold" data-tp="toggle" id="tpPlay">Play</button>
+        <button class="btn" data-tp="fwd">Frame &gt;</button>
+        <button class="btn" data-tp="live">Live &gt;|</button>
+      </div>
+      <div class="tp-sl">Slow motion<input type="range" id="tpSlow" min="0" max="16" value="0"><b id="tpSlowL">1x</b></div>
+      <div class="tp-row tp-chips">
+        <button class="btn" data-tp="rew">&lt;&lt; x2</button>
+        <button class="btn" data-tp="slow" data-n="16">1/17</button>
+        <button class="btn" data-tp="slow" data-n="7">1/8</button>
+        <button class="btn" data-tp="slow" data-n="3">1/4</button>
+        <button class="btn" data-tp="slow" data-n="1">1/2</button>
+        <button class="btn" data-tp="play">1x</button>
+        <button class="btn" data-tp="fast" data-n="2">x2</button>
+        <button class="btn" data-tp="fast" data-n="4">x4</button>
+      </div>
+      <div class="tp-row">
+        <button class="btn" data-tp="jump" data-k="C" data-d="-1">&lt; Crash</button>
+        <button class="btn" data-tp="jump" data-k="C" data-d="1">Crash &gt;</button>
+        <button class="btn" data-tp="jump" data-k="L" data-d="-1">&lt; Lap</button>
+        <button class="btn" data-tp="jump" data-k="L" data-d="1">Lap &gt;</button>
+      </div>
+      <div class="tp-lap">Go to lap <input type="number" id="tpLap" min="1" inputmode="numeric"><button class="btn" id="tpGo">Go</button></div>
+      <div class="tp-note" id="tpNote"></div>
+    </div>
+    <div class="hint">Every crash this race, the ones most worth showing first. Tap one to replay it (you out of your car). The highlight reel plays every crash worth a replay, oldest first.</div>
+    <div class="rp-now"><button class="btn gold" id="breel">Highlight reel</button><button class="btn" id="brlive">Back to live</button></div>
+    <div id="rpstate" class="hint"></div>
+    <div id="replays"></div>
+  </div>
+  <div class="panel" id="p-crew">
+    <h2>Crew chief<span class="beta">BETA</span></h2>
+    <div class="hint">See any car the way its crew chief does. Take a car to call its pit stops: when it pits under green, pit or stay out under caution, tires, fuel and chassis adjustments.</div>
+    <select id="crewcar"></select>
+    <div id="crewbox"></div>
+    <div id="crew"></div>
+  </div>
+  <div class="panel" id="p-settings">
+    <h2>Presets</h2>
+    <div class="card" id="presets"></div>
+    <button class="btn wide" id="bsave">Save current settings as a preset...</button>
+    <h2>Settings</h2>
+    <div class="hint">Changes save on RaceVision and take effect at once.</div>
+    <div id="pages"></div>
+    <h2>This phone</h2>
+    <div class="hint">New pairing code, or a different RaceVision? Pair again here: the home screen icon keeps working.</div>
+    <button class="btn wide" id="bunpair">Pair with a different code</button>
+  </div>
+</main>
+
+<nav>
+  <button class="on" data-p="field"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Field</button>
+  <button data-p="cams"><svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Cameras</button>
+  <button data-p="story"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Story</button>
+  <button data-p="replays"><svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></svg>Replays</button>
+  <button data-p="crew" class="crewtab"><svg viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>Crew</button>
+  <button data-p="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+</nav>
+<div id="toast"></div>
+
+<script>
+"use strict";
+// ---- pairing code: from the QR link, remembered for the home screen icon
+const qs = new URLSearchParams(location.search);
+let SAVED = "";
+try { SAVED = localStorage.getItem("rv_k") || ""; } catch (e) {}
+let KEY = qs.get("k") || SAVED, ALT = KEY !== SAVED ? SAVED : "";
+function useKey(k) {                               // a code that works: remember it
+  KEY = k;
+  if (SAVED !== k) { SAVED = k; try { localStorage.setItem("rv_k", k); } catch (e) {} }
+  if (qs.get("k") !== k) history.replaceState(null, "", "/?k=" + encodeURIComponent(k));
+  document.getElementById("manifest").href = "/manifest.json?k=" + encodeURIComponent(k);
+}
+document.getElementById("manifest").href = "/manifest.json?k=" + encodeURIComponent(KEY);
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let S = null, CFG = null, tab = "field";
+
+function toast(msg, err) {
+  const t = $("toast");
+  t.textContent = msg; t.className = "show" + (err ? " err" : "");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.className = "", 2200);
+}
+function buzz() { try { navigator.vibrate && navigator.vibrate(12); } catch (e) {} }
+
+async function api(path, params = {}, post = false) {
+  const u = new URLSearchParams({ ...params, k: KEY });
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), 8000);   // a request a sleeping phone left hanging
+  let r;
+  try { r = await fetch("/api/" + path + "?" + u, { method: post ? "POST" : "GET", cache: "no-store", signal: ac.signal }); }
+  finally { clearTimeout(t); }
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 403) throw Object.assign(new Error(j.error || "not paired"), { pair: true });
+  if (!r.ok) throw new Error(j.error || "RaceVision said no (" + r.status + ")");
+  return j;
+}
+async function act(path, params, okMsg) {
+  buzz();
+  try { await api(path, params, true); if (okMsg) toast(okMsg); setTimeout(poll, 150); return true; }
+  catch (e) { toast(e.message, true); return false; }
+}
+
+// ---- live state
+function banner(msg) { const b = $("banner"); b.textContent = msg || ""; b.className = "banner" + (msg ? " show" : ""); }
+let failCount = 0, pollTimer = 0;
+async function poll() {
+  clearTimeout(pollTimer);
+  try {
+    S = await api("state");
+    if (KEY !== SAVED) useKey(KEY);
+    failCount = 0; banner("");
+    render();
+  } catch (e) {
+    if (e.pair && ALT) { useKey(ALT); ALT = ""; poll(); scanPoll(); crewPoll(); return; }   // the saved code
+    if (e.pair) { showPair(KEY ? "RaceVision has a new pairing code." : "Pair this phone with RaceVision."); return; }
+    if (++failCount >= 3) banner("Can't reach RaceVision. Is it still running, and is this phone on the same Wi-Fi as the PC?");
+    $("sdot").className = "dot red"; $("stext").textContent = "Offline";
+  }
+  if (!document.hidden) pollTimer = setTimeout(poll, 500);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+// the lap as NR2003 shows it: the server sends the leader's laps done, the game counts the lap being run
+const gameLap = (done, total) => total > 0 ? Math.min(done + 1, total) : done + 1;
+const camName = n => (CFG && CFG.cams.find(c => c.n === n) || {}).name || ("Camera " + n);
+function chip(num, col, big) {
+  let style = "", dark = false;
+  if (col) {
+    const r = parseInt(col.substr(1, 2), 16), g = parseInt(col.substr(3, 2), 16), b = parseInt(col.substr(5, 2), 16);
+    dark = (r * 3 + g * 6 + b) / 10 > 150;
+    style = ` style="background:${col};color:${dark ? "#0c0e12" : "#fff"}"`;
+  }
+  return `<div class="num${big ? " big" : ""}"${style}>${esc(num)}</div>`;
+}
+// series art when RaceVision has a series: the number card (the plain chip if there is none) and
+// the headshot; the series is in the address so a new series isn't shown from the phone's cache
+const artUrl = (kind, n) => `/art/${kind}/${n}.png?k=${encodeURIComponent(KEY)}&s=${encodeURIComponent(S.series)}`;
+function numArt(num, col, big) {
+  const plain = chip(num, col, big);
+  if (!S || !S.series) return plain;
+  return `<img class="numart${big ? " big" : ""}" src="${artUrl("num", num)}" alt="${esc(num)}" data-plain="${esc(plain)}" onerror="this.outerHTML=this.dataset.plain">`;
+}
+function headArt(num, col, big) {
+  if (!S || !S.series) return "";
+  return `<span class="head${big ? " big" : ""}"${col ? ` style="border-color:${col}"` : ""}><img src="${artUrl("head", num)}" alt="" onerror="this.remove()"></span>`;
+}
+let lastField = "", lastStory = "", lastCams = "", lastOn = "", lastLogo = "";
+function render() {
+  // status + header buttons
+  let dot = "dot", txt;
+  if (!S.attached) txt = "NR2003 not running";
+  else if (!S.race) { txt = "Not a race session"; dot += " gold"; }
+  else {
+    txt = "Lap " + gameLap(S.lap, S.laps) + (S.laps > 0 ? " / " + S.laps : "") + "  ·  " + (S.flag === "green" ? "Green" : S.flag === "one to go" ? "One to go" : "Caution");
+    dot += S.flag === "green" ? " green" : " gold";
+  }
+  $("sdot").className = dot; $("stext").textContent = txt;
+  $("bpause").textContent = S.paused ? "Resume directing" : "Pause directing";
+  $("bpause").classList.toggle("on", S.paused);
+  $("odot").className = "dot " + (S.overlays ? "green" : "red");
+  $("otext").textContent = S.overlays ? "Overlays on" : "Overlays off";
+
+  // on TV
+  const on = S.on;
+  $("camname").textContent = S.cam >= 0 ? camName(S.cam).toUpperCase() + "  (" + S.cam + ")" : "";
+  const onCol = on ? (S.rows.find(r => r.slot === on.slot) || {}).col : "";
+  const onKey = on ? [on.num, onCol, S.series].join("|") : "";
+  if (onKey !== lastOn) {                                  // only when the car changes: no image flicker
+    lastOn = onKey;
+    $("onart").innerHTML = on ? headArt(on.num, onCol, true) + numArt(on.num, onCol, true) : '<div class="num big">-</div>';
+  }
+  const logoKey = S.logo ? S.series : "";
+  if (logoKey !== lastLogo) {
+    lastLogo = logoKey;
+    $("slogo").hidden = !logoKey;
+    if (logoKey) $("slogo").src = artUrl("logo", 0);
+  }
+  $("onname").textContent = on ? "P" + on.pos + "  " + on.name : S.attached ? "Waiting for a shot" : "Waiting for NR2003";
+  $("onwhy").textContent = on ? (on.kind === "MANUAL" ? "Your pick" : on.kind.charAt(0) + on.kind.slice(1).toLowerCase() + (on.why ? "  ·  " + on.why : "")) : "";
+  $("manual").classList.toggle("show", !!(on && on.manual));
+  if (on && on.manual) $("mantext").textContent = "You're directing  ·  " + on.left + "s";
+
+  // field
+  const f = JSON.stringify([S.rows, S.series]);
+  if (f !== lastField) {
+    lastField = f;
+    $("field").innerHTML = S.rows.length ? '<div class="list">' + S.rows.map(r =>
+      `<button class="row${r.tv ? " tv" : ""}" data-slot="${r.slot}"><span class="pos${r.pos === 1 ? " p1" : ""}">${r.pos}</span>${headArt(r.num, r.col)}${numArt(r.num, r.col)}` +
+      `<span class="name">${esc(r.name)}</span>${r.pit ? '<span class="tag pit">PIT</span>' : ""}${r.tv ? '<span class="tag tv">TV</span>' : ""}</button>`).join("") + "</div>"
+      : `<div class="empty">${S.attached ? "No cars on track yet." : "Start NR2003 and RaceVision finds it."}</div>`;
+  }
+  // story
+  const st = JSON.stringify([S.story, S.series]);
+  if (st !== lastStory) {
+    lastStory = st;
+    $("story").innerHTML = S.story.length ? '<div class="list">' + S.story.map(k =>
+      `<button class="row${k.tv ? " tv" : ""}" data-slot="${k.slot}"><span class="kind ${esc(k.kind)}">${esc(k.kind)}</span>${headArt(k.num, k.col)}${numArt(k.num, k.col)}` +
+      `<span class="name">${esc(k.name)}<span class="why">P${k.pos}${k.why ? "  ·  " + esc(k.why) : ""}</span></span>${k.tv ? '<span class="tag tv">TV</span>' : ""}</button>`).join("") + "</div>"
+      : `<div class="empty">${S.race ? (S.paused ? "The director is paused." : "Nothing yet.") : "Shows up during a race."}</div>`;
+  }
+  renderCams();
+}
+// The Cameras tab: tap = cut to it. Edit: move them (‹ ›), rename (✎), hide; Show hidden brings hidden ones back. A camera
+// list picked above (which cameras a shot opens on / follows with) is filled by tapping cameras: a tap adds or removes.
+const CM = { edit: false, hidden: false, list: "" };
+const camLists = () => CFG ? CFG.pages.flatMap(p => p.fields).filter(f => f.kind === "cams") : [];
+const listOf = v => String(v || "").split(/[ ,]+/).map(Number).filter(n => n > 0);
+function renderCams() {
+  if (!CFG) return;
+  const lists = camLists(), cur = lists.find(f => f.key === CM.list);
+  if (!cur) CM.list = "";
+  const inList = cur ? listOf(cur.value) : [];
+  const key = JSON.stringify([S && S.cam, CFG.cams, CM, cur && cur.value, lists.map(f => f.key)]);
+  if (key === lastCams) return;
+  lastCams = key;
+  $("bcedit").classList.toggle("on", CM.edit); $("bcedit").textContent = CM.edit ? "Done" : "Edit";
+  $("bchid").classList.toggle("on", CM.hidden);
+  $("camhint").textContent = CM.edit ? "‹ › moves a camera, ✎ renames it, hide takes it off this tab." :
+    cur ? "Tap cameras to add them to the list in order; tap one that's in it to take it out." :
+    "Tap to cut to a camera. Gold edge = on board (gets the in-car dash).";
+  $("clsel").innerHTML = `<option value="">Camera lists: pick one to fill it…</option>` +
+    lists.map(f => `<option value="${esc(f.key)}"${f.key === CM.list ? " selected" : ""}>${esc(f.label)}</option>`).join("");
+  $("clnow").innerHTML = cur ? (inList.length ? inList.map((n, i) =>
+    `<span class="clc" data-i="${i}"><b data-lm="-1">‹</b><span>${esc(camName(n))}</span><b data-lm="1">›</b><b data-lx>✕</b></span>`).join("")
+    : `<span class="hint" style="margin:0">Empty: the camera stays as it is.</span>`) : "";
+  const show = CFG.cams.filter(c => c.n !== 9 && (!c.hidden || CM.hidden || CM.edit || inList.includes(c.n)));
+  $("cams").innerHTML = show.map(c => {
+    const at = inList.indexOf(c.n);
+    return `<div class="cam${c.onboard ? " ob" : ""}${S && S.cam === c.n && !CM.edit ? " cur" : ""}${c.hidden ? " hid" : ""}${at >= 0 ? " inl" : ""}" data-cam="${c.n}">` +
+      (at >= 0 ? `<span class="pos">${at + 1}</span>` : "") + `<span class="n">${c.n}</span><span class="l">${esc(c.name)}</span>` +
+      (CM.edit ? `<span class="ced"><i data-mv="-1">‹</i><i data-ren>✎</i><i data-hide>${c.hidden ? "show" : "hide"}</i><i data-mv="1">›</i></span>` : "") + "</div>";
+  }).join("");
+}
+async function setList(key, nums) {               // a camera list, saved like any setting
+  const f = camLists().find(x => x.key === key);
+  const v = nums.join(", ");
+  if (f) f.value = v;
+  renderCams();
+  if (!(await act("set", { name: key, value: v }))) setTimeout(loadSettings, 300);
+}
+$("bcedit").onclick = () => { CM.edit = !CM.edit; if (CM.edit) CM.list = ""; renderCams(); };
+$("bchid").onclick = () => { CM.hidden = !CM.hidden; renderCams(); };
+$("clsel").onchange = e => { CM.list = e.target.value; if (CM.list) CM.edit = false; renderCams(); };
+$("clnow").addEventListener("click", e => {
+  const chip = e.target.closest("[data-i]"), f = camLists().find(x => x.key === CM.list);
+  if (!chip || !f) return;
+  const l = listOf(f.value), i = +chip.dataset.i, b = e.target.closest("b");
+  if (!b) return;
+  if (b.dataset.lx !== undefined) l.splice(i, 1);
+  else { const j = i + +b.dataset.lm; if (j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; }
+  setList(CM.list, l);
+});
+
+// taps
+function tapCar(e) {
+  const b = e.target.closest("[data-slot]");
+  if (!b) return;
+  b.classList.add("sent"); setTimeout(() => b.classList.remove("sent"), 400);
+  act("focus", { slot: b.dataset.slot });
+}
+$("field").addEventListener("click", tapCar);
+$("story").addEventListener("click", tapCar);
+$("cams").addEventListener("click", async e => {
+  const b = e.target.closest("[data-cam]");
+  if (!b) return;
+  const n = +b.dataset.cam, c = CFG.cams.find(x => x.n === n);
+  if (CM.edit) {
+    const t = e.target.closest("i");
+    if (!t || !c) return;
+    if (t.dataset.mv) {                           // swap with its neighbour on the tab
+      const ids = CFG.cams.map(x => x.n), i = ids.indexOf(n), j = i + +t.dataset.mv;
+      if (j < 0 || j >= ids.length) return;
+      [CFG.cams[i], CFG.cams[j]] = [CFG.cams[j], CFG.cams[i]];
+      renderCams();
+      act("camlist", { do: "order", list: CFG.cams.map(x => x.n).join(",") });
+    } else if (t.dataset.ren !== undefined) {
+      const v = prompt("Name for camera " + n + " (empty = its usual name):", c.name);
+      if (v === null) return;
+      if (await act("camlist", { do: "name", n, name: v.trim() })) setTimeout(loadSettings, 300);
+    } else if (t.dataset.hide !== undefined) {
+      c.hidden = !c.hidden; renderCams();
+      act("camlist", { do: "hide", n, on: c.hidden ? 1 : 0 });
+    }
+    return;
+  }
+  if (CM.list) {                                  // filling a camera list: add it, or take it out
+    const f = camLists().find(x => x.key === CM.list);
+    if (!f) return;
+    const l = listOf(f.value), i = l.indexOf(n);
+    if (i >= 0) l.splice(i, 1); else l.push(n);
+    buzz(); setList(CM.list, l);
+    return;
+  }
+  if (S && !S.camOk) { toast("Camera control isn't ready yet.", true); return; }
+  b.classList.add("sent"); setTimeout(() => b.classList.remove("sent"), 400);
+  act("cam", { c: b.dataset.cam });
+});
+$("bpause").onclick = () => act("pause", { on: S && S.paused ? 0 : 1 });
+$("bover").onclick = () => act("set", { name: "overlays", value: S && S.overlays ? "0" : "1" });
+$("bauto").onclick = () => act("auto", {}, "The director has it again");
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  tab = b.dataset.p;
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("show", p.id === "p-" + tab));
+  if (tab === "settings" || tab === "cams") loadSettings();
+  if (tab === "cams") cePoll();
+  if (tab === "crew") crewPoll();
+  if (tab === "replays") { replaysPoll(); tpPoll(); }
+  window.scrollTo(0, 0);
+});
+
+// ---- the live camera editor: works on the camera on screen; the values go into the game as you press
+let CE = null, ceSpeed = 1, ceBusy = false, ceQueue = null;
+async function cePoll() {
+  clearTimeout(cePoll.t);
+  if (tab !== "cams") return;
+  try { if (!ceBusy) { CE = await api("camedit"); ceRender(); } } catch (e) {}
+  cePoll.t = setTimeout(cePoll, document.hidden ? 5000 : 1200);
+}
+function ceRender() {
+  if (!CE) return;
+  const c = CFG && CFG.cams.find(x => x.n === CE.cam);
+  $("ce-name").textContent = "Adjust: " + CE.cam + "  " + (c ? c.name : "");
+  $("ce-state").textContent = CE.params.length ? (CE.live ? "not saved" : "saved") : "";
+  $("ce-why").textContent = CE.why;
+  $("ce-body").style.display = CE.params.length ? "" : "none";
+  $("ce-vals").innerHTML = CE.params.map(p => `<div>${p.n}<br><b>${p.u === "deg" ? Math.round(p.v) + "\u00b0" : p.v.toFixed(2) + " m"}</b></div>`).join("");
+  document.querySelectorAll("#ce [data-nd]").forEach(b => b.style.visibility = CE.params.length > +b.dataset.nd.split(",")[0] ? "" : "hidden");
+  document.querySelectorAll("#ce [data-mv]").forEach(b => {
+    const k = b.dataset.mv.split(",")[0];
+    b.style.visibility = CE.kind === "heli" ? (k === "u" ? "" : "hidden") : k === "turn" && CE.params.length < 4 ? "hidden" : "";
+  });
+  $("ce-del").hidden = !CE.custom;
+  const dr = CE.drone;                            // one of our helicopter cameras: the drone stick instead of the buttons
+  $("ce-drone").hidden = !dr;
+  $("ce-pad").style.display = dr ? "none" : "";
+  document.querySelectorAll("#ce .ce-grid, #ce .ce-row").forEach(x => x.style.display = dr ? "none" : "");
+  if (dr) {
+    $("dr-distv").textContent = dr.dist + " %";
+    $("dr-topv").textContent = dr.top + " mph"; $("dr-hovv").textContent = dr.hover + " m";
+    if (!droneSliding) { $("dr-top").value = dr.top; $("dr-hov").value = dr.hover; }
+  }
+}
+let droneSliding = false;
+async function ceSend(params) {                   // one request at a time; while one is out the newest waits
+  if (ceBusy) { ceQueue = params; return; }
+  ceBusy = true;
+  try { CE = await api("camedit", params, true); ceRender(); }
+  catch (e) { toast(e.message, true); }
+  ceBusy = false;
+  if (ceQueue) { const q = ceQueue; ceQueue = null; await ceSend(q); }
+}
+function ceAction(b) {
+  if (b.dataset.nd) { const [p, k] = b.dataset.nd.split(","); return { do: "nudge", p, amt: +k * ceSpeed }; }
+  const [k, d] = b.dataset.mv.split(","), v = +d * ceSpeed;
+  if (k === "turn") return { do: "nudge", p: 3, amt: v };
+  return { do: "move", f: k === "f" ? v : 0, s: k === "s" ? v : 0, u: k === "u" ? v : 0 };
+}
+document.querySelectorAll("#ce [data-nd], #ce [data-mv]").forEach(b => {   // tap = one step; hold = repeats
+  // (live 2026-10-27: a finger scrolling the page over these buttons fired them; now a press waits 180 ms and is
+  // dropped if the finger moves or the page scrolls)
+  let wait = null, rep = null, start = null;
+  const stop = () => { clearTimeout(wait); clearInterval(rep); wait = rep = start = null; b.classList.remove("held"); };
+  b.addEventListener("pointerdown", e => {
+    start = [e.clientX, e.clientY];
+    clearTimeout(wait); clearInterval(rep);
+    wait = setTimeout(() => {
+      wait = null; b.classList.add("held"); buzz();
+      ceSend(ceAction(b)); rep = setInterval(() => ceSend(ceAction(b)), 110);
+    }, 180);
+  });
+  b.addEventListener("pointermove", e => { if (start && Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 10) stop(); });
+  b.addEventListener("pointerup", () => { if (wait) { buzz(); ceSend(ceAction(b)); } stop(); });   // a quick tap: one step
+  b.addEventListener("pointercancel", stop); b.addEventListener("pointerleave", stop);
+  b.addEventListener("contextmenu", e => e.preventDefault());
+});
+document.querySelectorAll("#ce-speed button").forEach(b => b.onclick = () => {
+  ceSpeed = +b.dataset.sp;
+  document.querySelectorAll("#ce-speed button").forEach(x => x.classList.toggle("on", x === b));
+});
+(() => {                                          // the drag pad: across = turn, up and down = tilt
+  const pad = $("ce-pad");
+  let last = null, acc = [0, 0], t = null;
+  const flush = () => {
+    if (!acc[0] && !acc[1]) return;
+    const k = 0.25 * ceSpeed;
+    ceSend({ do: "look", dt: (-acc[0] * k).toFixed(2), dp: (acc[1] * k).toFixed(2) });
+    acc = [0, 0];
+  };
+  pad.addEventListener("pointerdown", e => { e.preventDefault(); try { pad.setPointerCapture(e.pointerId); } catch (x) {} pad.classList.add("drag"); last = [e.clientX, e.clientY]; clearInterval(t); t = setInterval(flush, 90); });
+  pad.addEventListener("pointermove", e => { if (!last) return; acc[0] += e.clientX - last[0]; acc[1] += e.clientY - last[1]; last = [e.clientX, e.clientY]; });
+  const end = () => { if (!last) return; last = null; pad.classList.remove("drag"); clearInterval(t); flush(); };
+  pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end);
+})();
+(() => {                                          // the drone stick: up/down = climb/drop, left/right = closer/farther;
+  const st = $("ce-stick"), knob = $("ce-knob");  // how far it is pushed = how fast; it springs back to the middle
+  let on = false, ax = 0, ay = 0, t = null;
+  const tick = () => {
+    if (!on || (!ax && !ay)) return;
+    const k = ceSpeed, dz = v => Math.abs(v) < 0.08 ? 0 : v;   // a small dead zone in the middle
+    const u = -dz(ay) * 1.2 * k, dd = dz(ax) * 3 * k;            // per 90 ms: up to ~13 m/s climb, ~33 %/s distance
+    if (u || dd) ceSend({ do: "drone", u: u.toFixed(2), dd: dd.toFixed(2) });
+  };
+  const move = e => {
+    const r = st.getBoundingClientRect(), R = Math.min(r.width, r.height) / 2 - 30;
+    let x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
+    const m = Math.hypot(x, y); if (m > R) { x *= R / m; y *= R / m; }
+    ax = x / R; ay = y / R;
+    knob.style.transform = `translate(${x}px, ${y}px)`;
+  };
+  st.addEventListener("pointerdown", e => { e.preventDefault(); try { st.setPointerCapture(e.pointerId); } catch (x) {} on = true; st.classList.add("drag"); buzz(); move(e); clearInterval(t); t = setInterval(tick, 90); });
+  st.addEventListener("pointermove", e => { if (on) move(e); });
+  const end = () => { if (!on) return; on = false; ax = ay = 0; st.classList.remove("drag"); knob.style.transform = ""; clearInterval(t); };
+  st.addEventListener("pointerup", end); st.addEventListener("pointercancel", end);
+  const slider = (id, key) => {                   // sliders: live while dragged (at most ~8 a second)
+    const el = $(id); let last = 0, timer = null;
+    const send = () => { last = Date.now(); ceSend({ do: "drone", [key]: el.value }); };
+    el.addEventListener("input", () => { droneSliding = true; clearTimeout(timer); if (Date.now() - last > 120) send(); else timer = setTimeout(send, 120); });
+    el.addEventListener("change", () => { clearTimeout(timer); send(); droneSliding = false; });
+  };
+  slider("dr-top", "top"); slider("dr-hov", "hover");
+})();
+$("ce-save").onclick = () => ceSend({ do: "save" }).then(() => toast("Saved"));
+$("ce-reset").onclick = () => ceSend({ do: "reset" }).then(() => toast("Back to its first set-up"));
+$("ce-new").onclick = () => ceSend({ do: "new" }).then(() => { toast("New camera made"); setTimeout(loadSettings, 400); });
+$("ce-del").onclick = () => { if (confirm("Delete this camera?")) ceSend({ do: "delete" }).then(() => setTimeout(loadSettings, 400)); };
+
+
+// ---- playback transport: NR2003's own replay controls (scrub, frame step, slow motion 1/2 - 1/17, laps, crashes)
+let TP = null, tpDrag = false, tpMarksKey = "";
+const tpTime = (f, rate) => { const s = Math.max(0, Math.round(f / (rate || 36))); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+async function tpSend(args) {
+  buzz();
+  try { await api("tape/ctl", args, true); setTimeout(tpPoll, 250); }
+  catch (e) { toast(e.message, true); }
+}
+async function tpPoll() {
+  clearTimeout(tpPoll.t);
+  if (tab !== "replays") return;
+  try {
+    TP = await api("tape");
+    const t = TP, live = t.mode !== 1;
+    const sp = $("tpSpeed");
+    sp.textContent = t.speed; sp.className = "tp-speed" + (live ? " live" : "");
+    $("tp").className = "tp" + (t.can || !live ? "" : " off");
+    if (t.frames > 0) {
+      let lap = "";
+      for (const m of t.marks) if (m.t === "L" && m.f <= t.idx) lap = m.l;
+      $("tpPos").textContent = live ? tpTime(t.frames, t.rate) + " of race recorded" : tpTime(t.idx, t.rate) + " / " + tpTime(t.frames, t.rate) + (lap ? "  -  " + lap : "");
+      if (!tpDrag) $("tpSeek").value = live ? 1000 : Math.round(1000 * t.idx / Math.max(1, t.frames - 1));
+      const key = t.frames + ":" + t.marks.length;
+      if (key !== tpMarksKey) {
+        tpMarksKey = key;
+        $("tpMarks").innerHTML = t.marks.map(m => `<i class="${m.t === "C" ? "c" : m.t === "F" ? "f" : ""}" style="left:${(100 * m.f / Math.max(1, t.frames - 1)).toFixed(2)}%" title="${esc(m.l)}"></i>`).join("");
+      }
+    } else $("tpPos").textContent = "";
+    const slowN = t.slow ? Math.abs(t.step) : 0;
+    $("tpPlay").textContent = !live && t.step !== 0 ? "Pause" : "Play";
+    $("tpPlay").className = "btn gold";
+    if (!tpDrag) { $("tpSlow").value = slowN; $("tpSlowL").textContent = slowN ? "1/" + (slowN + 1) : "1x"; }
+    $("tpNote").textContent = t.msg || (!t.can && live ? t.why : "");
+  } catch (e) {}
+  tpPoll.t = setTimeout(tpPoll, document.hidden ? 4000 : 500);
+}
+$("tp").addEventListener("click", e => {
+  const b = e.target.closest("[data-tp]");
+  if (!b) return;
+  const k = b.dataset.tp;
+  if (k === "start") tpSend({ do: "start" });
+  else if (k === "back") tpSend({ do: "step", d: -1 });
+  else if (k === "fwd") tpSend({ do: "step", d: 1 });
+  else if (k === "toggle") tpSend({ do: TP && TP.mode === 1 && TP.step !== 0 ? "pause" : "play" });
+  else if (k === "live") tpSend({ do: "live" });
+  else if (k === "play") tpSend({ do: "play" });
+  else if (k === "slow") tpSend({ do: "slow", n: b.dataset.n });
+  else if (k === "fast") tpSend({ do: "fast", n: b.dataset.n });
+  else if (k === "rew") tpSend({ do: "fast", n: 2, rev: 1 });
+  else if (k === "jump") tpSend({ do: "jump", kind: b.dataset.k, d: b.dataset.d });
+});
+$("tpSeek").addEventListener("input", e => { tpDrag = true; if (TP && TP.frames > 0) $("tpPos").textContent = tpTime(e.target.value / 1000 * TP.frames, TP.rate) + " / " + tpTime(TP.frames, TP.rate); });
+$("tpSeek").addEventListener("change", e => { tpDrag = false; tpSend({ do: "seek", f: (e.target.value / 1000).toFixed(4) }); });
+$("tpSlow").addEventListener("input", e => { tpDrag = true; const n = +e.target.value; $("tpSlowL").textContent = n ? "1/" + (n + 1) : "1x"; });
+$("tpSlow").addEventListener("change", e => { tpDrag = false; const n = +e.target.value; tpSend(n ? { do: "slow", n } : { do: "play" }); });
+$("tpGo").onclick = () => { const n = parseInt($("tpLap").value, 10); if (n > 0) tpSend({ do: "lap", n }); };
+
+// ---- replays: the crash list, play one, the highlight reel
+let lastReplays = "";
+async function replaysPoll() {
+  clearTimeout(replaysPoll.t);
+  if (tab !== "replays") return;
+  try {
+    const r = await api("replays");
+    const key = JSON.stringify(r);
+    if (key !== lastReplays) {
+      lastReplays = key;
+      const ago = s => s < 90 ? Math.round(s) + "s ago" : Math.round(s / 60) + " min ago";
+      $("replays").innerHTML = r.crashes.length ? '<div class="list">' + r.crashes.map(c =>
+        `<button class="row${r.playing === c.id ? " tv" : ""}" data-crash="${c.id}"><span class="kind ${c.worthy ? "worthy" : "seen"}">LAP ${gameLap(c.lap, S.laps)}</span>` +
+        `<span class="name">${esc(c.who)}<span class="why">${c.cars} car${c.cars === 1 ? "" : "s"}  ·  damage ${c.damage.toFixed(2)}  ·  ${ago(c.ago)}${c.replayed ? "  ·  shown" : ""}</span></span>` +
+        `${r.playing === c.id ? '<span class="tag tv">ON</span>' : ""}</button>`).join("") + "</div>"
+        : `<div class="empty">No crashes logged this race yet.</div>`;
+      $("rpstate").textContent = r.playing >= 0 ? (r.reel ? "Highlight reel  ·  " : "Replaying  ·  ") + "angle " + r.take + " of " + r.takes
+        : r.plan >= 0 ? "A replay is counting down." : r.inCar ? "You're in your car: replays wait until you're out." : "";
+    }
+  } catch (e) {}
+  replaysPoll.t = setTimeout(replaysPoll, document.hidden ? 5000 : 1500);
+}
+$("replays").addEventListener("click", e => {
+  const b = e.target.closest("[data-crash]");
+  if (!b) return;
+  b.classList.add("sent"); setTimeout(() => b.classList.remove("sent"), 400);
+  act("replay", { do: "crash", id: b.dataset.crash }, "Replay rolling");
+});
+$("breel").onclick = () => act("replay", { do: "reel" }, "Highlight reel");
+$("brlive").onclick = () => act("replay", { do: "live" }, "Back to live");
+
+// ---- settings and presets
+async function loadSettings() {
+  try { CFG = await api("settings"); } catch (e) { return; }
+  renderCams();
+  if (tab === "settings" && !document.activeElement.closest?.("#pages")) renderSettings();
+}
+function renderSettings() {
+  const open = [...document.querySelectorAll("details.page[open]")].map(d => d.dataset.name);
+  $("presets").innerHTML = CFG.presets.map(p =>
+    `<div class="preset"><div class="name">${esc(p.name)}<small class="${p.diffs ? "" : "use"}">${p.diffs ? p.diffs + (p.diffs === 1 ? " setting changes" : " settings change") + (p.builtin ? "  ·  built in" : "") : "In use"}</small></div>` +
+    `<button class="btn${p.diffs ? " gold" : ""}" data-load="${esc(p.name)}">Load</button></div>`).join("");
+  $("pages").innerHTML = CFG.pages.map(pg =>
+    `<details class="page" data-name="${esc(pg.name)}"${open.includes(pg.name) ? " open" : ""}><summary>${esc(pg.name)}</summary><div class="inner">` +
+    pg.fields.map(fieldHtml).join("") + "</div></details>").join("");
+}
+function fieldHtml(f) {
+  const v = f.value, k = esc(f.key);
+  let ctl, wide = false;
+  if (f.kind === "toggle") ctl = `<button class="sw${+v ? " on" : ""}" data-k="${k}" data-toggle="${+v ? 0 : 1}" aria-label="${esc(f.label)}"></button>`;
+  else if (f.kind === "choice") ctl = `<div class="seg">${f.choices.map(c => `<button class="${c[0].toLowerCase() === v.toLowerCase() ? "on" : ""}" data-k="${k}" data-v="${esc(c[0])}">${esc(c[1])}</button>`).join("")}</div>`;
+  else if (f.kind === "color") ctl = `<input type="color" data-k="${k}" value="${/^#[0-9a-f]{6}$/i.test(v) ? v : "#3cc8c8"}">`;
+  else if (f.kind === "cams") {
+    wide = true;
+    const l = listOf(v);
+    ctl = `<div class="camchips">${l.length ? l.map(n => `<span>${esc(camName(n))}</span>`).join("") : '<span>none</span>'}</div>` +
+      `<button class="btn" data-pickcams="${k}" style="margin-top:6px">Pick cameras</button>`;
+  }
+  else {
+    wide = f.kind === "text";
+    ctl = `<input type="text" data-k="${k}" data-num="${f.kind === "num" ? 1 : ""}" value="${esc(v)}" ${f.kind === "num" ? 'inputmode="decimal"' : ""} autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">`;
+  }
+  return `<div class="field${wide ? " wide" : ""}"><div class="txt"><div class="lab">${esc(f.label)}</div><div class="help">${esc(f.help)}</div></div>${ctl}</div>`;
+}
+$("pages").addEventListener("click", e => {
+  const b = e.target.closest("[data-pickcams]");
+  if (!b) return;
+  const key = b.dataset.pickcams;
+  document.querySelector('nav button[data-p="cams"]').click();
+  CM.list = key; CM.edit = false; lastCams = ""; renderCams();
+});
+$("pages").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-k]");
+  if (!b) return;
+  const v = b.dataset.toggle ?? b.dataset.v;
+  if (await act("set", { name: b.dataset.k, value: v })) {
+    if (b.dataset.toggle !== undefined) { b.classList.toggle("on"); b.dataset.toggle = b.classList.contains("on") ? 0 : 1; }
+    else b.parentNode.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    setTimeout(loadSettings, 500);
+  }
+});
+$("pages").addEventListener("change", async e => {
+  const i = e.target.closest("input[data-k]");
+  if (!i) return;
+  let v = i.value.trim();
+  if (i.type === "color") v = v.toUpperCase();
+  if (i.dataset.num && (v === "" || isNaN(Number(v)))) { i.classList.add("bad"); toast("That's not a number.", true); return; }
+  i.classList.remove("bad");
+  if (await act("set", { name: i.dataset.k, value: v })) {
+    i.classList.add("ok"); setTimeout(() => i.classList.remove("ok"), 900);
+    const f = CFG.pages.flatMap(p => p.fields).find(x => x.key === i.dataset.k);
+    if (f) f.value = v;
+  }
+});
+$("pages").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input[type=text]")) e.target.blur(); });
+$("presets").addEventListener("click", async e => {
+  const b = e.target.closest("[data-load]");
+  if (!b) return;
+  if (await act("preset", { do: "load", name: b.dataset.load }, "Loaded “" + b.dataset.load + "”")) setTimeout(loadSettings, 600);
+});
+$("bsave").onclick = async () => {
+  const name = (prompt("Name for the preset (saves every setting but the art):") || "").trim();
+  if (!name) return;
+  if (CFG && CFG.presets.some(p => p.name.toLowerCase() === name.toLowerCase()) && !confirm("Replace the preset “" + name + "”?")) return;
+  if (await act("preset", { do: "save", name }, "Saved “" + name + "”")) setTimeout(loadSettings, 600);
+};
+
+// ---- AIMOD's scanner: RaceVision passes on each call AIMOD airs, as it sounds on the PC. Phones only
+// play sound after a tap, and stop when the screen locks, so listening starts with the Scanner button.
+const SC = { avail: null, listening: false, ctx: null, last: -1, queue: [], playing: null, timer: 0, phoneOnly: false,
+             hear: (() => { try { return localStorage.getItem("rv_hear") || "car"; } catch (e) { return "car"; } })() };
+// what this phone plays: everything the scanner airs, or (running a car) its radio, with its teammates if asked
+function hears(c) {
+  const mine = typeof CC !== "undefined" ? CC.mine : "";
+  if (!mine || SC.hear === "all" || c.number == null || String(c.number) === mine) return true;
+  if (SC.hear !== "team" || !CC.data || !CC.data.cars) return false;
+  const me = CC.data.cars.find(x => x.number === mine), it = CC.data.cars.find(x => x.number === String(c.number));
+  return !!(me && it && me.team >= 0 && me.team === it.team);
+}
+const ROLE = { crew: "CREW CHIEF", spotter: "SPOTTER", driver: "DRIVER" };
+async function scanPoll() {
+  clearTimeout(SC.timer);
+  if (SC.busy) { SC.again = true; return; }                                    // one request at a time
+  if (document.body.classList.contains("pairing")) return;
+  SC.busy = true;
+  let j = null;
+  try { j = await api("scanner", SC.listening ? { listen: 1 } : {}); } catch (e) {}
+  SC.busy = false;
+  if (SC.again) { SC.again = false; scanPoll(); return; }
+  SC.avail = j;
+  if (SC.listening && j && j.aimod) {
+    const clips = j.radio.clips, now = performance.now();
+    if (SC.last < 0) SC.last = clips.reduce((m, c) => Math.max(m, c.id), 0);      // start with the next call
+    for (const c of clips) {
+      if (c.id <= SC.last) continue;
+      SC.last = c.id;
+      if (!c.cut && hears(c)) SC.queue.push({ ...c, until: now + (c.secs - c.age + 1.5) * 1000 });
+    }
+    const p = SC.playing;
+    if (p && clips.some(c => c.id === p.id && c.cut)) stopClip();             // an urgent call cut it off
+    SC.queue = SC.queue.filter(c => !clips.some(x => x.id === c.id && x.cut));
+    playNext();
+  }
+  scanRender();
+  if (!document.hidden) SC.timer = setTimeout(scanPoll, SC.listening ? 250 : 3000);
+}
+function playNext() {
+  if (SC.playing || !SC.queue.length) return;
+  const c = SC.queue.shift();
+  if (performance.now() > c.until) { playNext(); return; }                    // stale: the PC is past it
+  SC.playing = c;
+  fetch("/api/scanner/" + c.id + ".wav?k=" + encodeURIComponent(KEY), { cache: "no-store" })
+    .then(r => { if (!r.ok) throw new Error(); return r.arrayBuffer(); })
+    .then(buf => new Promise((ok, bad) => SC.ctx.decodeAudioData(buf, ok, bad)))
+    .then(audio => {
+      if (SC.playing !== c) return;
+      const src = SC.ctx.createBufferSource();
+      src.buffer = audio;
+      src.connect(SC.ctx.destination);
+      src.onended = () => { if (SC.playing === c) { SC.playing = null; scanRender(); playNext(); } };
+      c.src = src;
+      src.start();
+      scanRender();
+    })
+    .catch(() => { if (SC.playing === c) { SC.playing = null; playNext(); } });
+}
+function stopClip() {
+  const p = SC.playing;
+  SC.playing = null;
+  try { p && p.src && p.src.stop(); } catch (e) {}
+}
+function scanRender() {
+  const j = SC.avail, row = $("scan");
+  row.classList.toggle("show", !!(j && j.enabled));
+  if (!j || !j.enabled) { $("onair").className = "onair"; return; }
+  const b = $("bscan");
+  let dot = "dot", txt;
+  if (!j.aimod) { txt = "Scanner  <small>AIMOD isn't running</small>"; b.className = "ctl na"; }
+  else if (SC.listening) {
+    dot += " green"; b.className = "ctl on";
+    txt = "Listening" + (j.radio.on ? "" : "  <small>AIMOD's scanner is off</small>");
+  } else {
+    b.className = "ctl";
+    txt = "Listen to the scanner" + (j.radio.on ? "" : "  <small>(off in AIMOD)</small>");
+  }
+  $("scdot").className = dot; $("sctext").innerHTML = txt;
+  SC.phoneOnly = !!(j.aimod && j.radio.phone_only);
+  $("bponly").classList.toggle("on", SC.phoneOnly);
+  $("bponly").parentNode.style.opacity = j.aimod ? 1 : .5;
+  $("hear").classList.toggle("show", !!(j.aimod && CC.mine));
+  document.querySelectorAll("#hear button").forEach(b => b.classList.toggle("on", b.dataset.h === SC.hear));
+  const p = SC.playing && SC.playing.src ? SC.playing : null;
+  $("onair").className = "onair" + (p ? " show" : "");
+  if (p) {
+    const key = p.id;
+    if ($("onair").dataset.id !== String(key)) {
+      $("onair").dataset.id = key;
+      const r = S && p.number != null ? S.rows.find(x => String(x.num) === String(p.number)) : null;
+      const col = r ? r.col : "";
+      $("onair").innerHTML = (p.number != null ? headArt(p.number, col) + numArt(p.number, col) : "") +
+        `<div class="who"><small>${ROLE[p.role] || "RADIO"}</small>${esc(r ? r.name : p.number != null ? "#" + p.number : "Team radio")}</div>` +
+        '<div class="bars"><i></i><i></i><i></i></div>';
+    }
+  }
+}
+$("bscan").onclick = async () => {
+  const j = SC.avail;
+  if (!j || !j.aimod) { toast("Start AIMOD on the PC, with its scanner on.", true); return; }
+  buzz();
+  if (SC.listening) {
+    SC.listening = false; SC.queue = []; stopClip();
+  } else {
+    try {
+      SC.ctx = SC.ctx || new (window.AudioContext || window.webkitAudioContext)();
+      await SC.ctx.resume();
+      const s = SC.ctx.createBufferSource();                                   // a silent blip unlocks iPhone sound
+      s.buffer = SC.ctx.createBuffer(1, 1, 22050); s.connect(SC.ctx.destination); s.start();
+    } catch (e) { toast("This browser can't play the scanner.", true); return; }
+    SC.listening = true; SC.last = -1; SC.queue = [];
+    toast(SC.phoneOnly ? "Listening (the PC stays quiet)" : "Listening");
+  }
+  scanPoll();
+};
+$("hear").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  buzz(); SC.hear = b.dataset.h;
+  try { localStorage.setItem("rv_hear", SC.hear); } catch (x) {}
+  SC.queue = SC.queue.filter(hears);
+  scanRender();
+  toast({ car: `Only #${CC.mine}'s radio`, team: `#${CC.mine} and its teammates`, all: "Everything on the scanner" }[SC.hear]);
+};
+$("bponly").onclick = async () => {
+  if (!SC.avail || !SC.avail.aimod) return;
+  buzz();
+  const on = !SC.phoneOnly;
+  try {
+    await api("scanner/phoneonly", { on: on ? 1 : 0 }, true);
+    SC.avail.radio.phone_only = on;
+    toast(on ? "The PC stays quiet while this phone listens" : "The PC plays the scanner too");
+    scanRender();
+  } catch (e) { toast(e.message, true); }
+};
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) { stopClip(); SC.queue = []; return; }
+  if (SC.listening && SC.ctx) {                    // back from the lock screen: sound may need another tap
+    try { await SC.ctx.resume(); } catch (e) {}
+    if (SC.ctx.state !== "running") { SC.listening = false; toast("Tap Listen to hear the scanner again"); }
+    SC.last = -1;                                  // don't replay what aired while away
+  }
+  scanPoll();
+});
+
+// ---- crew chief (beta, read-only): AIMOD's view of one car, passed on by RaceVision. The tab only shows
+// when AIMOD is running with "Crew chief on phones" ticked.
+const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} };
+const load = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
+const CC = { data: null, timer: 0, busy: false, fails: 0, pick: load("rv_crew"), token: load("rv_crew_token"), mine: load("rv_crew_car"),
+             svc: "4", fuel: "", sent: null, lastFlag: "", boxHtml: "", planLap: 0,
+             adj: { wedge: 0, bar: 0, air: 0, tape: 0 } };
+async function crewPoll() {
+  clearTimeout(CC.timer);
+  if (document.body.classList.contains("pairing")) return;
+  if (CC.busy) { CC.timer = setTimeout(crewPoll, 1000); return; }
+  CC.busy = true;
+  try {
+    CC.data = await api("crew"); CC.fails = 0;
+  } catch (e) { if (++CC.fails >= 5) CC.data = null; }                  // a blip keeps the last view
+  if (CC.token && CC.data && CC.data.enabled) {                         // keep the car: check in with AIMOD
+    let r = null;
+    try { r = await api("crew/ping", { token: CC.token }); } catch (e) {}   // no answer: try again next time
+    if (r && !r.ok) await reclaim();
+  }
+  if (CC.mine && CC.data && CC.data.enabled) {
+    if (CC.lastFlag === "green" && CC.data.flag !== "green") {          // caution: your call
+      try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
+      toast(`Caution! Make the call for #${CC.mine}`);
+      if (tab !== "crew") document.querySelector('nav button[data-p="crew"]').click();
+    }
+    CC.lastFlag = CC.data.flag;
+  }
+  CC.busy = false;
+  const on = !!(CC.data && CC.data.enabled);
+  document.querySelector("nav").classList.toggle("five", on);
+  if (!on && tab === "crew") document.querySelector('nav button[data-p="field"]').click();
+  if (on && tab === "crew") crewRender();
+  CC.timer = setTimeout(crewPoll, document.hidden ? 5000 : tab === "crew" ? 1000 : 4000);
+}
+// AIMOD gave the car back (the phone slept over 10 minutes, or AIMOD restarted): take it again under the same name
+async function reclaim() {
+  const name = load("rv_name"), car = CC.mine;
+  let r = null;
+  if (name && car) try { r = await api("crew/claim", { car, name }, true); } catch (e) {}
+  if (r && r.ok) { CC.token = r.token; store("rv_crew_token", r.token); toast(`#${car} is yours again`); return; }
+  if (r || !name) { toast((r && r.error) || `AIMOD has #${car} back`, true); dropCar(); }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) crewPoll(); });
+const pct = x => x == null ? "-" : Math.round(x * 100) + "%";
+const lapT = t => t >= 60 ? Math.floor(t / 60) + ":" + (t % 60).toFixed(3).padStart(6, "0") : t.toFixed(3);
+function crewRender() {
+  const d = CC.data, sel = $("crewcar");
+  if (!d.cars.length) { $("crew").innerHTML = '<div class="empty">Shows up once cars are on track.</div>'; return; }
+  if (!d.cars.some(c => c.number === CC.pick))
+    CC.pick = (S && S.on && d.cars.some(c => c.number === String(S.on.num))) ? String(S.on.num) : d.cars[0].number;
+  const opts = d.cars.map(c => `<option value="${esc(c.number)}">${c.pos ? "P" + c.pos + "  " : ""}#${esc(c.number)}  ${esc(c.name)}${c.player ? "  (you)" : ""}</option>`).join("");
+  if (sel.dataset.opts !== opts) { sel.innerHTML = opts; sel.dataset.opts = opts; }
+  if (document.activeElement !== sel) sel.value = CC.pick;
+  const c = d.cars.find(x => x.number === CC.pick);
+  crewBox(d, c);
+  const f = c.fuel || {}, p = c.plan || {}, t = c.tires || {};
+  const row = S ? S.rows.find(r => String(r.num) === c.number) : null, col = row ? row.col : "";
+  let margin = "";
+  if (f.margin != null) margin = f.margin >= 0 ? `<span class="cc-good">makes it, ${f.margin.toFixed(1)} spare</span>`
+                                               : `<span class="cc-bad">${(-f.margin).toFixed(1)} laps short</span>`;
+  const tire = (k, lab) => { const w = t[k] || 0; return `<div class="cc-tire${w >= 0.75 ? " hot" : w >= 0.5 ? " mid" : ""}">${pct(w)}<small>${lab}</small></div>`; };
+  const laps = c.laps || [], best = laps.length ? Math.min(...laps) : null;
+  let call = "";
+  if (d.flag !== "green") {
+    if (p.decision === true) call = `<div class="cc-big cc-warn">Pitting</div><div class="cc-small">${esc(p.service || "")} ${esc(p.call_note || "")}</div>`;
+    else if (p.decision === false) call = `<div class="cc-big">Staying out</div><div class="cc-small">${esc(p.call_note || "")}</div>`;
+    else call = `<div class="cc-big">${d.pits_open ? "Deciding" : "Pits closed"}</div>`;
+  }
+  const plan = p.stage_break ? "At the stage break" : p.lap ? "Lap " + p.lap : (c.next_pit || "-");
+  const hand = c.handling ? `<span class="${c.handling === "neutral" ? "cc-good" : "cc-warn"}">${c.handling}</span>` : "-";
+  const pace = c.pace_delta != null ? (c.pace_delta > 0 ? c.pace_delta.toFixed(2) + " s a lap slower" : (-c.pace_delta).toFixed(2) + " s a lap quicker") + " than the cars around him" : "";
+  $("crew").innerHTML =
+    `<div class="cc-head">${headArt(c.number, col, true)}${numArt(c.number, col, true)}<div style="min-width:0"><div class="nm">${esc(c.name)}</div>` +
+    `<div class="sub">${c.pos ? "P" + c.pos : ""}${c.laps_down ? "  ·  " + c.laps_down + " down" : ""}  ·  Lap ${d.lap}${d.laps ? " / " + d.laps : ""}  ·  ${esc(c.status || "")}</div></div></div>` +
+    `<div class="cc-grid">` +
+    `<div class="cc-card"><h3>FUEL</h3><div class="cc-big">${f.laps != null ? f.laps.toFixed(1) : "-"} <span class="cc-small">laps</span></div>` +
+    `<div class="cc-bar"><i style="width:${Math.round((f.frac || 0) * 100)}%"></i></div>` +
+    `<div class="cc-small">${f.tank ? "tank " + f.tank.toFixed(0) + " laps" : ""}${f.real ? "" : " (estimate)"}</div><div class="cc-small">${margin}</div></div>` +
+    `<div class="cc-card"><h3>TIRES (WORN)</h3><div class="cc-tires">${tire("lf", "LF")}${tire("rf", "RF")}${tire("lr", "LR")}${tire("rr", "RR")}</div>` +
+    `<div class="cc-small">${c.falloff != null ? "falling off " + pct(c.falloff) : ""}${c.tires_left ? "  ·  sets " + esc(c.tires_left) : ""}</div></div>` +
+    `<div class="cc-card wide"><h3>LAP TIMES (LATEST LAST)</h3><div class="cc-laps">${laps.map(x => `<span class="${x === best ? "best" : ""}">${lapT(x)}</span>`).join("") || '<span class="cc-small">after the next lap</span>'}</div>` +
+    `<div class="cc-small">${pace}</div></div>` +
+    `<div class="cc-card"><h3>${d.flag === "green" ? "NEXT STOP" : "CAUTION CALL"}</h3>${call || `<div class="cc-big">${esc(plan)}</div><div class="cc-small">${esc(p.note || p.style || "")}</div>`}` +
+    `<div class="cc-small">${c.stops || 0} stops${c.last_pit ? "  ·  last " + esc(c.last_pit) : ""}</div></div>` +
+    `<div class="cc-card"><h3>HANDLING</h3><div class="cc-big">${hand}</div><div class="cc-small">${(c.setup && c.setup.changes.length) ? esc(c.setup.changes.join(", ")) : "no changes yet"}</div>` +
+    `${c.damage > 0.05 ? `<div class="cc-small cc-bad">damage ${pct(c.damage)}</div>` : ""}</div>` +
+    `<div class="cc-card wide"><h3>RADIO</h3><div class="cc-radio">${(c.radio || []).slice().reverse().map(l => `<div>${esc(l)}</div>`).join("") || '<span class="cc-small">Nothing said yet (the scanner must be on in AIMOD).</span>'}</div></div>` +
+    `</div>`;
+}
+// taking a car and making its caution call: drawn only when it changes, so a tap is never lost to a redraw
+function dropCar() { CC.token = CC.mine = ""; store("rv_crew_token", null); store("rv_crew_car", null); CC.sent = null; CC.planLap = 0; CC.adj = { wedge: 0, bar: 0, air: 0, tape: 0 }; }
+const SVC = [["4", "Four tires"], ["R", "Right sides"], ["L", "Left sides"], ["F", "Fuel only"], ["", "AIMOD picks"]];
+const FUEL = [["1", "Splash"], ["2", "Half can"], ["3", "One can"], ["4", "Can and a half"], ["5", "Full"], ["", "AIMOD picks"]];
+function crewBox(d, c) {
+  const h = c.human || {}, mine = CC.mine === c.number, call = h.call;
+  let html = "";
+  if (!d.calls) html = "";
+  else if (c.player) html = `<div class="cc-box"><div class="cc-small">That's your own car: you're the driver.</div></div>`;
+  else if (!mine && h.owner) html = `<div class="cc-box"><div class="cc-row"><div class="grow"><b>${esc(h.owner)}</b> is the crew chief for #${esc(c.number)}` +
+                                    `${h.away ? `<div class="cc-small">Their phone is asleep: AIMOD runs the car until they're back.</div>` : ""}</div></div></div>`;
+  else if (!mine) html = `<div class="cc-box"><div class="cc-row"><div class="grow cc-small">Nobody's calling #${esc(c.number)}: AIMOD runs it.${CC.mine ? ` You're running #${esc(CC.mine)}.` : ""}</div>` +
+                         (CC.mine ? "" : `<button class="btn gold" data-cc="take">Take this car</button>`) + `</div></div>`;
+  else {
+    const caution = d.flag !== "green";
+    html = `<div class="cc-box ${caution ? "call" : "mine"}"><div class="cc-row"><div class="grow"><b>You're the crew chief</b> for #${esc(c.number)}</div>` +
+           `<button class="btn" data-cc="drop">Give it back</button></div>`;
+    if (!caution) html += planPanel(d, c, h);
+    else {
+      const pit = call ? call.pit : null;
+      html += `<div class="cc-callbtns"><button class="pit${pit === true ? " on" : ""}" data-cc="pit">PIT</button><button class="stay${pit === false ? " on" : ""}" data-cc="stay">STAY OUT</button></div>` +
+              `<div class="cc-label">TIRES</div><div class="cc-opts">${SVC.map(([k, l]) => `<button class="${CC.svc === k ? "on" : ""}" data-svc="${k}">${l}</button>`).join("")}</div>` +
+              `<div class="cc-label">FUEL</div><div class="cc-opts">${FUEL.map(([k, l]) => `<button class="${CC.fuel === k ? "on" : ""}" data-fuel="${k}">${l}</button>`).join("")}</div>` +
+              `<div class="cc-status">${!d.pits_open ? "Pit road isn't open yet: your call waits for it." : ""} <span id="cc-left" class="cc-count"></span> ` +
+              `<span>${esc(callStatus(h, call))}</span></div>` +
+              (h.ai_must ? `<div class="cc-small">AIMOD would pit: ${esc(h.ai_must)}</div>` : "");
+    }
+    html += adjustPanel(c, h) + `</div>`;
+  }
+  if (html !== CC.boxHtml) { CC.boxHtml = html; $("crewbox").innerHTML = html; }
+  const left = $("cc-left");
+  if (left) left.textContent = h.deadline_s != null ? Math.max(0, Math.ceil(h.deadline_s)) + " s" : "";
+}
+// what AIMOD did with the call, in words
+function callStatus(h, call) {
+  const st = h.status || "";
+  if (st.startsWith("WAITS")) return "AIMOD is waiting for your call";
+  if (st === "accepted" && call) return call.pit ? "AIMOD has it: pitting" + (call.service ? ", " + call.service.toLowerCase() : "") : "AIMOD has it: staying out";
+  if (st.startsWith("overridden")) return "AIMOD overruled you: " + st.replace(/^overridden:\s*/, "");
+  if (st.startsWith("no answer")) return "No call in time: AIMOD made it";
+  if (st === "too late") return "Too late: one to go is out";
+  if (st.startsWith("too late:")) return "Too late: " + st.slice(9).trim();   // e.g. already heading to pit road
+  return st || (call ? "Sent: it goes in once pit road lets the car through" : "AIMOD is waiting for your call");
+}
+// green flag: the next stop's lap and service (or box this lap); AIMOD keeps it safe on fuel
+function planPanel(d, c, h) {
+  const mine = h.plan, f = c.fuel || {};
+  const aimodLap = h.ai_plan_lap || (c.plan && c.plan.lap) || null;
+  const fuelTo = f.laps != null ? d.lap + Math.floor(f.laps) : null;
+  if (!CC.planLap) CC.planLap = (mine && mine.lap) || aimodLap || d.lap + 5;
+  CC.planLap = Math.max(d.lap, d.laps ? Math.min(d.laps, CC.planLap) : CC.planLap);
+  let html = `<div class="cc-label" style="margin-top:10px">NEXT STOP</div>`;
+  if (mine) html += `<div class="cc-status"><b>Your plan:</b> lap ${mine.lap}${mine.service ? ", " + esc(mine.service.toLowerCase()) : ""}. ` +
+                    `<span>${esc(planStatus(h.plan_status))}</span></div>`;
+  else html += `<div class="cc-status">AIMOD's plan${aimodLap ? ": lap " + aimodLap : ""}. Set your own below.</div>`;
+  html += `<div class="cc-step"><button data-lap="-1">−</button><div class="lap">Lap ${CC.planLap}<small>${fuelTo ? "fuel lasts to about lap " + fuelTo : ""}${aimodLap ? (fuelTo ? " · " : "") + "AIMOD: lap " + aimodLap : ""}</small></div><button data-lap="1">+</button><button data-lap="5">+5</button></div>` +
+          (fuelTo && CC.planLap > fuelTo ? `<div class="cc-small cc-bad">The fuel won't last that long: AIMOD will bring it in earlier, around lap ${fuelTo}.</div>` : "") +
+          `<div class="cc-label">TIRES</div><div class="cc-opts">${SVC.map(([k, l]) => `<button class="${CC.svc === k ? "on" : ""}" data-svc="${k}">${l}</button>`).join("")}</div>` +
+          `<div class="cc-label">FUEL</div><div class="cc-opts">${FUEL.map(([k, l]) => `<button class="${CC.fuel === k ? "on" : ""}" data-fuel="${k}">${l}</button>`).join("")}</div>` +
+          `<div class="cc-actions"><button class="gold" data-cc="plan">Pit on lap ${CC.planLap}</button><button data-cc="boxnow">Box this lap</button>` +
+          (mine ? `<button class="wide" data-cc="unplan">Let AIMOD plan it</button>` : "") + `</div>`;
+  return html;
+}
+function planStatus(st) {
+  st = st || "";
+  if (st.startsWith("accepted")) return "AIMOD has it.";
+  if (st.startsWith("overridden")) return "AIMOD changed it: " + st.replace(/^overridden:\s*/, "") + ".";
+  if (st === "done") return "Done.";
+  if (st === "used under caution") return "Used: the car pitted under caution.";
+  return st ? st + "." : "Sent.";
+}
+async function sendPlan(lap, clear) {
+  buzz();
+  try {
+    const r = await api("crew/plan", clear ? { token: CC.token, clear: 1 } : { token: CC.token, lap, service: CC.svc, fuel: CC.fuel }, true);
+    if (!r.ok) throw new Error(r.error);
+    toast(clear ? "AIMOD plans the next stop" : (r.lap <= CC.data.lap ? "Box this lap!" : "Pitting on lap " + r.lap));
+    if (!clear) CC.planLap = r.lap;
+  } catch (e) { toast(e.message, true); }
+  CC.boxHtml = ""; setTimeout(crewPoll, 200);
+}
+// chassis changes made at the car's next stop (green or caution); how they work out depends on how the car
+// really handles, which the driver tells you through the handling read and the radio
+const ADJ = [["wedge", "Wedge", "+ tightens", n => n * 5 + " lb"],
+             ["bar", "Track bar", "+ up, frees it", n => n * 0.25 + " in"],
+             ["air", "RR air", "+ in, frees it", n => n * 0.5 + " psi"],
+             ["tape", "Tape", "+ speed, heat", n => n * 5 + "%"]];
+function adjustPanel(c, h) {
+  const sent = h.adjust, hand = c.handling;
+  if (CC.adjSent && !sent) CC.adj = { wedge: 0, bar: 0, air: 0, tape: 0 };   // made at the stop: start fresh
+  CC.adjSent = !!sent;
+  const a = CC.adj;
+  const sign = n => (n > 0 ? "+" : n < 0 ? "−" : "");
+  let html = `<div class="cc-label" style="margin-top:12px">ADJUSTMENTS AT THE NEXT STOP</div>`;
+  html += `<div class="cc-small">${hand === "tight" ? "He's <b>tight</b> against the field: free it up (wedge out, track bar up, air in the right rear)."
+                                  : hand === "loose" ? "He's <b>loose</b> against the field: tighten it (wedge in, track bar down, air out of the right rear)."
+                                  : hand === "neutral" ? "The balance looks about right: changes may hurt." : "No handling read yet."}</div>`;
+  for (const [k, lab, hint, fmt] of ADJ)
+    html += `<div class="cc-adj"><div class="k">${lab}<small>${hint}</small></div><button data-adj="${k}" data-d="-1">−</button>` +
+            `<div class="v${a[k] ? "" : " zero"}">${a[k] ? sign(a[k]) + fmt(Math.abs(a[k])) : "0"}</div><button data-adj="${k}" data-d="1">+</button></div>`;
+  if (sent) {
+    const what = ADJ.filter(([k]) => sent[k]).map(([k, lab, , fmt]) => `${lab.toLowerCase()} ${sign(sent[k])}${fmt(Math.abs(sent[k]))}`).join(", ");
+    html += `<div class="cc-status"><b>Set:</b> ${esc(what || "no changes")}. <span>AIMOD makes it at the next stop.</span></div>`;
+  } else if (h.adjust_status) html += `<div class="cc-status">${esc(adjustStatus(h.adjust_status))}</div>`;
+  html += `<div class="cc-actions"><button class="gold" data-cc="adjust">${Object.values(a).some(v => v) ? "Set for the next stop" : "No changes next stop"}</button>` +
+          `<button data-cc="adjzero">Reset</button>` +
+          (sent ? `<button class="wide" data-cc="unadjust">Let AIMOD's crew decide</button>` : "") + `</div>`;
+  return html;
+}
+function adjustStatus(st) {
+  if (st.startsWith("done: ")) return "Last stop: " + st.slice(6) + ".";
+  if (st.startsWith("no changes")) return "Last stop: no changes made" + (st.length > 10 ? " (" + st.slice(12) + ")." : ".");
+  if (st.startsWith("waiting")) return "That was a damage stop: your changes wait for the next one.";
+  return st;
+}
+async function sendAdjust(clear) {
+  buzz();
+  try {
+    const r = await api("crew/adjust", clear ? { token: CC.token, clear: 1 } : Object.assign({ token: CC.token }, CC.adj), true);
+    if (!r.ok) throw new Error(r.error);
+    toast(clear ? "AIMOD's crew decides the changes" : "Set for the next stop");
+  } catch (e) { toast(e.message, true); }
+  CC.boxHtml = ""; setTimeout(crewPoll, 200);
+}
+async function sendCall(pit) {
+  const d = CC.data;
+  buzz();
+  try {
+    const r = await api("crew/call", { token: CC.token, caution: d.caution_no, pit: pit ? 1 : 0, service: pit ? CC.svc : "", fuel: pit ? CC.fuel : "" }, true);
+    if (!r.ok) throw new Error(r.error);
+    toast(pit ? "Pit call sent" : "Stay-out call sent");
+  } catch (e) { toast(e.message, true); }
+  setTimeout(crewPoll, 200);
+}
+$("crewbox").addEventListener("click", async e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.svc !== undefined) { CC.svc = b.dataset.svc; CC.boxHtml = ""; crewRender(); return; }
+  if (b.dataset.fuel !== undefined) { CC.fuel = b.dataset.fuel; CC.boxHtml = ""; crewRender(); return; }
+  if (b.dataset.lap !== undefined) { CC.planLap += Number(b.dataset.lap); CC.boxHtml = ""; crewRender(); return; }
+  if (b.dataset.adj !== undefined) {
+    const k = b.dataset.adj; CC.adj[k] = Math.max(-3, Math.min(3, CC.adj[k] + Number(b.dataset.d)));
+    CC.boxHtml = ""; crewRender(); return;
+  }
+  const what = b.dataset.cc;
+  if (what === "take") {
+    let name = load("rv_name");
+    if (!name) { name = (prompt("Your name (shown to the others):") || "").trim(); if (!name) return; store("rv_name", name); }
+    try {
+      const r = await api("crew/claim", { car: CC.pick, name }, true);
+      if (!r.ok) throw new Error(r.error);
+      CC.token = r.token; CC.mine = r.car; store("rv_crew_token", r.token); store("rv_crew_car", r.car);
+      CC.lastFlag = CC.data.flag; buzz();
+      toast(`You're the crew chief for #${r.car}` + (SC.listening ? "" : ". Tap Listen to hear his radio"));
+      if (!load("rv_hear")) SC.hear = "car";
+    } catch (x) { toast(x.message, true); }
+    CC.boxHtml = ""; crewPoll();
+  } else if (what === "drop") {
+    if (!confirm(`Give #${CC.mine} back to AIMOD?`)) return;
+    try { await api("crew/release", { token: CC.token }, true); } catch (x) {}
+    dropCar(); CC.boxHtml = ""; crewPoll();
+  } else if (what === "plan") sendPlan(CC.planLap, false);
+  else if (what === "boxnow") { if (confirm(`Box #${CC.mine} this lap?`)) sendPlan(CC.data.lap, false); }
+  else if (what === "unplan") { CC.planLap = 0; sendPlan(0, true); }
+  else if (what === "adjust") sendAdjust(false);
+  else if (what === "adjzero") { CC.adj = { wedge: 0, bar: 0, air: 0, tape: 0 }; CC.boxHtml = ""; crewRender(); }
+  else if (what === "unadjust") sendAdjust(true);
+  else if (what === "pit") sendCall(true);
+  else if (what === "stay") sendCall(false);
+});
+$("crewcar").addEventListener("change", e => { CC.pick = e.target.value; try { localStorage.setItem("rv_crew", CC.pick); } catch (x) {} crewRender(); });
+
+// ---- pairing by typing the code (a page on the home network can't use the camera: browsers
+// only allow it on https pages)
+function showPair(why, cancel) {
+  clearTimeout(pollTimer);
+  $("pwhy").textContent = why;
+  $("bpaircancel").hidden = !cancel;
+  $("perr").textContent = "";
+  document.body.classList.add("pairing");
+}
+$("bdirector").onclick = () => { location.href = "/director?k=" + encodeURIComponent(KEY); };
+$("bunpair").onclick = () => showPair("Type the pairing code from RaceVision's Phone page.", true);
+$("bpaircancel").onclick = () => { document.body.classList.remove("pairing"); poll(); scanPoll(); crewPoll(); };
+async function pair() {
+  const code = $("pcode").value.replace(/[\s-]/g, "").toLowerCase();
+  if (code.length < 8) { $("perr").textContent = "The code has 8 letters and numbers."; return; }
+  $("perr").textContent = "";
+  try {
+    const r = await fetch("/api/state?k=" + encodeURIComponent(code), { cache: "no-store" });
+    if (r.status === 403) { $("perr").textContent = "That code doesn't match. Check the Phone page in RaceVision."; return; }
+    if (!r.ok) throw new Error();
+  } catch (e) { $("perr").textContent = "Can't reach RaceVision. Is it running, and is this phone on the same Wi-Fi?"; return; }
+  useKey(code); ALT = "";
+  document.body.classList.remove("pairing");
+  $("pcode").value = "";
+  buzz(); toast("Paired");
+  loadSettings();
+  poll();
+  scanPoll();
+  crewPoll();
+}
+$("bpair").onclick = pair;
+$("pcode").addEventListener("keydown", e => { if (e.key === "Enter") pair(); });
+
+if (!KEY) showPair("Pair this phone with RaceVision.");
+else { loadSettings(); poll(); scanPoll(); crewPoll(); }
+</script>
+</body>
+</html>
