@@ -43,6 +43,7 @@
 #include <random>
 #include <array>
 #include <set>
+#include <functional>
 #include <xaudio2.h>
 #include <commdlg.h>
 #include <shellapi.h>
@@ -77,7 +78,7 @@ static void Log(const char *fmt, ...) {
 		std::string line = g_logPart.substr(0, nl);
 		g_logPart.erase(0, nl + 1);
 		if (g_logFile) { fputs(line.c_str(), g_logFile); fputc('\n', g_logFile); fflush(g_logFile); }
-		if (line.size() > 11 && line[0] == '[' && line.compare(11, 6, "REPLAY") == 0) {   // the Replays page's log
+		if (line.size() > 11 && line[0] == '[' && (line.compare(11, 6, "REPLAY") == 0 || line.compare(11, 9, "HIGHLIGHT") == 0)) {   // the Replays page's log
 			g_replayLog.push_back(line);
 			if (g_replayLog.size() > 60) g_replayLog.erase(g_replayLog.begin());
 		}
@@ -517,6 +518,19 @@ struct Settings {
 	double replayTake = 8;           // seconds of each angle after the first
 	double replayCountdown = 5;      // the alert counts down this long before an automatic replay rolls
 	int reelAngles = 1;              // angles per crash in the highlight reel
+	// highlights besides crashes (racevision_highlights.cpp): passes for the front, multi-passes, bump and runs, the finish
+	bool highlights = true;          // log them (Replays page, phone, the highlight reel); nothing goes on air by itself but the finish
+	int hlMultiCars = 2;             // a multi-pass: one car by this many cars in one corner or one straight (superspeedways: last lap only)
+	double hlGap = 180;              // passes, multi-passes and bump and runs: at most one in this many game s (the better one stays; the last lap is free)
+	bool hlBump = true;              // a pass right after the car behind hit the back of the one it passed (not a crash)
+	double hlBumpWindow = 3;         // ...within this many game s of the hit
+	int hlBumpDepth = 10;            // ...for this position or better
+	std::string superspeedways = "daytona; talladega";   // track folder names (a part of one; ; between): multi-passes there only on the last lap
+	double replaySlowImpact = 1.0;   // crash replays: a slow-motion look (one, the hardest hit) only when its hardest single hit is this big
+	double hlPreroll = 6;            // highlight replays start this long before the moment (game s)
+	bool replayFinish = true;        // replay the finish by itself once the winner and the runner-up are across the line
+	double replayFinishAfter = 6;    // ...this long after (real s)
+	bool reelHighlights = true;      // the highlight reel plays these too (with the crashes, in race order)
 	bool replayDrive = true;         // a replay asked for while you drive (Ctrl+F7, buttons): pause the race around it
 	double contactJoin = 0.05;       // a contact this big near a crash going on = that car is in it
 	double crashSpan = 20;           // a crash takes hits from its first this many game s only (its damage = theirs)
@@ -686,6 +700,27 @@ static const char *DEFAULT_INI =
 	"; in your car, Ctrl+F7 (or a replay button) pauses the race, plays the replay, and resumes it after\n"
 	"replay_drive = 1\n"
 	"cam_replay_angles = 16, 5, 21\n"
+	"; highlights besides crashes, few and far between: a multi-pass (one car by multi_pass_cars cars in one corner or\n"
+	";   one straight; on the superspeedways only on the last lap), a last-lap pass for the podium, a bump and run (the\n"
+	";   nose of the car behind on the tail of the one ahead, then by it within bump_run_window s, for P1 to\n"
+	";   bump_run_depth) and the finish. At most one pass-type highlight every highlight_gap game s (the better one\n"
+	";   stays; the last lap is free). No slow motion on passes. They go on the Replays list,\n"
+	";   the phone and the highlight reel (reel_highlights); only the finish replays by itself (replay_finish,\n"
+	";   replay_finish_after s after the runner-up crosses). Their replays start highlight_preroll s before.\n"
+	"highlights = 1\n"
+	"multi_pass_cars = 2\n"
+	"highlight_gap = 180\n"
+	"highlight_bump = 1\n"
+	"bump_run_window = 3\n"
+	"bump_run_depth = 10\n"
+	"superspeedways = daytona; talladega\n"
+	"; crash replays get one slow-motion look (the hardest hit, from the first cam_replay camera, last) only when that\n"
+	";   hit is replay_slow_impact or more (a single damage jump; 0.5 = a crash, 1+ = a big one)\n"
+	"replay_slow_impact = 1.0\n"
+	"highlight_preroll = 6\n"
+	"replay_finish = 1\n"
+	"replay_finish_after = 6\n"
+	"reel_highlights = 1\n"
 	"contact_join = 0.05\n"
 	"; a crash counts the damage of the hits in its first crash_span game seconds only\n"
 	"crash_span = 20\n"
@@ -841,6 +876,18 @@ static void LoadSettings() {
 		else if (k == "replay_countdown") S.replayCountdown = std::max(0.0, std::min(30.0, d));
 		else if (k == "reel_angles") S.reelAngles = std::max(1, std::min(6, (int)d));
 		else if (k == "replay_drive") S.replayDrive = d != 0;
+		else if (k == "highlights") S.highlights = d != 0;
+		else if (k == "multi_pass_cars") S.hlMultiCars = std::max(2, std::min(20, (int)d));
+		else if (k == "highlight_gap") S.hlGap = std::max(0.0, std::min(3600.0, d));
+		else if (k == "bump_run_window") S.hlBumpWindow = std::max(0.5, std::min(10.0, d));
+		else if (k == "bump_run_depth") S.hlBumpDepth = std::max(1, std::min(43, (int)d));
+		else if (k == "superspeedways") S.superspeedways = v;
+		else if (k == "replay_slow_impact") S.replaySlowImpact = std::max(0.0, d);
+		else if (k == "highlight_bump") S.hlBump = d != 0;
+		else if (k == "highlight_preroll") S.hlPreroll = std::max(1.0, std::min(20.0, d));
+		else if (k == "replay_finish") S.replayFinish = d != 0;
+		else if (k == "replay_finish_after") S.replayFinishAfter = std::max(0.0, std::min(60.0, d));
+		else if (k == "reel_highlights") S.reelHighlights = d != 0;
 		else if (k == "contact_join") S.contactJoin = std::max(0.0, d);
 		else if (k == "crash_span") S.crashSpan = std::max(3.0, std::min(120.0, d));
 		else if (k == "custom_cams") S.customCams = d != 0;
@@ -1081,7 +1128,24 @@ struct Crash {
 	std::vector<float> carHit, carPeak;   // per car (same order as cars): damage it took, its hardest jump
 	std::vector<double> carPeakAt;        //   and when that was
 	double worthyAt = -1;            // real time it became worth a replay (the alert)
+	// a highlight that isn't a crash (racevision_highlights.cpp, kept in g_highs): the same replay machinery, with
+	// impactAt = the moment (the pass, the bump, the line), impactCar = the car it is about, lastAt = its end
+	int kind = 0;                    // HL_CRASH, or HL_PASS / HL_MULTI / HL_BUMP / HL_FINISH
+	double score = 0;                // a highlight's worth (crashes: Worth)
+	int other = -1;                  // the car passed / bumped / beaten to the line
+	std::string what;                // "LAST LAP: PASS FOR P2", "2 CARS IN ONE MOVE", "WINS BY 0.214 S" ...
+	bool lastLap = false;            // a pass-type highlight on the last lap (outside highlight_gap)
 };
+enum { HL_CRASH = 0, HL_PASS, HL_MULTI, HL_BUMP, HL_FINISH };
+static const char *HlTitle(int kind) {
+	static const char *t[] = { "CRASH", "PASS", "ON THE MOVE", "BUMP AND RUN", "THE FINISH" };
+	return kind >= 0 && kind <= HL_FINISH ? t[kind] : "REPLAY";
+}
+static const char *HlKey(int kind) {
+	static const char *t[] = { "crash", "pass", "multi", "bump", "finish" };
+	return kind >= 0 && kind <= HL_FINISH ? t[kind] : "crash";
+}
+static std::string HlLabel(const Crash &c) { return std::string(c.kind ? "highlight" : "crash") + " #" + std::to_string(c.id); }
 static void CarVecs(Crash &c) {
 	c.carHit.resize(c.cars.size(), 0); c.carPeak.resize(c.cars.size(), 0); c.carPeakAt.resize(c.cars.size(), -1);
 }
@@ -1089,15 +1153,20 @@ static void CarVecs(Crash &c) {
 // two cars touching - live 2026-10-26: a 2-car tangle got the replay over the big one). No damage read = by cars.
 static bool g_dmgSeen = false;               // this race's damage can be read (a car's damage went up)
 static double Worth(const Crash &c) {
+	if (c.kind) return c.score;
 	double n = (double)c.cars.size();
 	if (c.damage > 0) return c.damage + 0.5 * (n - 1);
 	return g_dmgSeen ? 0 : 0.8 * n;              // damage is read and nobody took any: not worth a replay
 }
 // every contact (damage going up), the last 2 minutes: the crash log looks back at them
-struct Contact { int car; double start, end, peakAt; float gain, peak, dist; int nearCar; bool used; };
+struct Contact { int car; double start, end, peakAt; float gain, peak, dist; int nearCar; bool used; float rear = 0, front = 0; };
 static std::vector<Contact> g_contacts;
 static std::vector<Crash> g_crashes;
 static int g_crashSeq = 0;
+static std::vector<Crash> g_highs;          // the other highlights (ids from 1001, so they never meet a crash's)
+static int g_hlSeq = 1000;
+static void HighlightWatch();               // racevision_highlights.cpp: each poll, after the passes
+static void HlReset();
 
 static std::string Short(int i) {
 	const Car &c = g_car[i];
@@ -1159,6 +1228,7 @@ static void ResetRace() {
 	}
 	g_greens = 0; g_firstLeaderLaps = -1; g_greenNow = false; g_raceNo++;
 	g_crashes.clear(); g_crashSeq = 0; g_contacts.clear(); g_planReset = true; g_dmgSeen = false;
+	g_highs.clear(); g_hlSeq = 1000; HlReset();
 	g_tapeMap.clear(); TpReset();
 	for (bool &d : g_stageDone) d = false;
 }
@@ -1443,6 +1513,7 @@ static void ContactWatch() {
 			double st0 = c.hitStart;
 			c.hitStart = -1;
 			Contact ct = { i, st0, c.hitLast, c.hitPeakAt, c.hitGain, c.hitPeak, c.hitDist, c.hitNear, false };
+			ct.rear = c.hitZ[0]; ct.front = c.hitZ[1];     // (bump and runs: the nose of the one behind, the tail of the one ahead)
 			g_contacts.push_back(ct);
 			while (!g_contacts.empty() && g_simT - g_contacts.front().end > 120) g_contacts.erase(g_contacts.begin());
 			DamageCrash(g_contacts.back());
@@ -1749,6 +1820,7 @@ static void Poll(Game &g) {
 			else if (now - cb.passSince > 2 && !cb.passed) { cb.passed = true; g_passCar = b; g_passVictim = a; g_passAt = now; }
 		} else if (d > 0) { cb.passSince = -1; cb.passed = false; }
 	}
+	HighlightWatch();
 }
 
 // change of gap over the last few seconds, seconds per second (negative = closing)
@@ -2546,7 +2618,9 @@ static void Direct(Game &g) {
 // A replay is one or more takes: the crash's hardest hit first, then (a multi-car crash) the next cars hit hardest,
 // each from another camera - new angles on the same wreck.
 static const char *CamName(int c);
-struct Take { int car = -1, cam = -1; double guide = 0, len = 0; };   // guide: game s of the car's hardest hit
+struct Take { int car = -1, cam = -1; double guide = 0, len = 0, pre = -1; bool slow = false; };   // slow: the one slow-motion look   // guide: game s of the car's hardest hit; pre: starts this long before it (-1 = replay_preroll)
+static double Pre(const Take &t) { return t.pre >= 0 ? t.pre : S.replayPreroll; }
+static std::vector<Take> HighlightTakes(Crash &c);   // racevision_highlights.cpp
 struct ReplayRun {
 	bool paused = false;             // RaceVision paused the race for this replay (you were driving): resume after
 	int phase = 0; int crash = -1, car = -1, cam = -1; double at = 0, len = 0, back = 0; int ticks0 = 0, frames0 = 0;
@@ -2568,7 +2642,11 @@ static double g_reelNext = 0;
 static volatile int g_reqReplayId = -1;    // play this crash (phone list) / -2 the highlight reel
 static volatile bool g_reqReel = false;
 
-static Crash *CrashById(int id) { for (auto &c : g_crashes) if (c.id == id) return &c; return nullptr; }
+static Crash *CrashById(int id) {             // (a highlight too: they share the replay machinery)
+	for (auto &c : g_crashes) if (c.id == id) return &c;
+	for (auto &c : g_highs) if (c.id == id) return &c;
+	return nullptr;
+}
 
 static bool ReplaySigOk(Game &g) {
 	if (g_replaySigPid != g.pid) {             // the tape functions are where they were found (this NR2003.exe)
@@ -2697,7 +2775,7 @@ static bool RollTake(Game &g, int k) {
 		for (int j = 0; j < 80 && !live; j++) { Sleep(25); live = g.Get<int>(RP_MODE, -1) == 0; }
 		if (!live) return false;
 	}
-	double simNow = GameSec(g), start = tk.guide - S.replayPreroll;
+	double simNow = GameSec(g), start = tk.guide - Pre(tk);
 	double back = simNow - start, len = tk.len;
 	int frames = g.Get<int>(RP_FRAMES, 0), rate = g.Get<int>(TICK_RATE_FLAG, 1) != 0 ? 36 : g.Get<int>(TICK_RATE_VALUE, 36);
 	if (rate <= 0 || rate > 10000) rate = 36;
@@ -2712,7 +2790,7 @@ static bool RollTake(Game &g, int k) {
 	double onTape = frames / (double)rate - 1;
 	if (back > onTape) {                                        // the tape doesn't go back that far: as far as it does
 		Log("           tape holds %.0fs, the replay would start %.0fs ago\n", onTape, back);
-		if (onTape < back - S.replayPreroll - 1) { Log("[%02d:%02d:%02d] REPLAY   crash #%d is off the tape\n", st.wHour, st.wMinute, st.wSecond, c->id); return false; }
+		if (onTape < back - Pre(tk) - 1) { Log("[%02d:%02d:%02d] REPLAY   %s is off the tape\n", st.wHour, st.wMinute, st.wSecond, HlLabel(*c).c_str()); return false; }
 		len -= back - onTape;
 		back = onTape;
 	}
@@ -2724,8 +2802,8 @@ static bool RollTake(Game &g, int k) {
 	if (mode == 1 && !ran) Log("           (the replay call was slow to report back, but the tape is rolling)\n");
 	if (mode != 1) {
 		g_replayFails++;
-		Log("[%02d:%02d:%02d] REPLAY   crash #%d: the replay did not start (%s, tape mode %d)\n", st.wHour, st.wMinute, st.wSecond,
-		    c->id, ran ? "called" : "call not run", mode);
+		Log("[%02d:%02d:%02d] REPLAY   %s: the replay did not start (%s, tape mode %d)\n", st.wHour, st.wMinute, st.wSecond,
+		    HlLabel(*c).c_str(), ran ? "called" : "call not run", mode);
 		return false;
 	}
 	bool camOk = tk.car >= 0 && g.Set(tk.cam, tk.car, true);
@@ -2746,11 +2824,12 @@ static bool RollTake(Game &g, int k) {
 	float hit = 0;
 	CarVecs(*c);
 	for (size_t j = 0; j < c->cars.size(); j++) if (c->cars[j] == tk.car) hit = c->carPeak[j];
-	Log("[%02d:%02d:%02d] REPLAY   crash #%d (%s) angle %d of %d: %s, cam %d (%s), from %.1fs back = %.1fs before its hardest hit (+%.3f), %.0fs%s%s%s\n",
-	    st.wHour, st.wMinute, st.wSecond, c->id, CrashWho(*c, 6).c_str(), k + 1, (int)g_rp.takes.size(),
-	    tk.car >= 0 ? Name(tk.car).c_str() : "-", tk.cam, tk.cam >= 0 ? CamName(tk.cam) : "-", back, tk.guide - g_rp.tape0, hit, len,
+	Log("[%02d:%02d:%02d] REPLAY   %s (%s%s%s) angle %d of %d: %s, cam %d (%s), from %.1fs back = %.1fs before its %s (+%.3f), %.0fs%s%s%s\n",
+	    st.wHour, st.wMinute, st.wSecond, HlLabel(*c).c_str(), c->kind ? c->what.c_str() : "", c->kind ? ": " : "", CrashWho(*c, 6).c_str(), k + 1, (int)g_rp.takes.size(),
+	    tk.car >= 0 ? Name(tk.car).c_str() : "-", tk.cam, tk.cam >= 0 ? CamName(tk.cam) : "-", back, tk.guide - g_rp.tape0,
+	    c->kind ? "moment" : "hardest hit", hit, len,
 	    g_rp.byHand ? ", by hand" : "", g_reel.empty() ? "" : ", highlight reel", camOk ? "" : "  (camera FAILED)");
-	if (k == 0) Log("           tape %d frames at %d/s, rolling %d, race %s, crash worth %.1f\n", frames, rate, g.Get<int>(RP_ROLLING, -1),
+	if (k == 0) Log("           tape %d frames at %d/s, rolling %d, race %s, worth %.1f\n", frames, rate, g.Get<int>(RP_ROLLING, -1),
 	                g.Get<unsigned char>(SIM_STATE, 0) == 3 ? "paused" : "running", Worth(*c));
 	return true;
 }
@@ -2762,28 +2841,33 @@ static void ReplayStart(Game &g, int crashId, bool byHand, int angles = -1, bool
 	if (!c) { Log("[%02d:%02d:%02d] REPLAY   no crash logged yet\n", st.wHour, st.wMinute, st.wSecond); return; }
 	c->replayed = true;
 	std::string why;
-	if (!ReplayReady(g, why, drive)) { Log("[%02d:%02d:%02d] REPLAY   crash #%d not replayed: %s\n", st.wHour, st.wMinute, st.wSecond, c->id, why.c_str()); return; }
+	if (!ReplayReady(g, why, drive)) { Log("[%02d:%02d:%02d] REPLAY   %s not replayed: %s\n", st.wHour, st.wMinute, st.wSecond, HlLabel(*c).c_str(), why.c_str()); return; }
 	bool pausedHere = false;
 	if (g.Get<int>(DRIVER_STATE, -1) == 3) {                     // you're driving: the race waits while you watch
 		if (g.Get<unsigned char>(SIM_STATE, 0) != 3) {
-			if (!GamePause(g)) { Log("[%02d:%02d:%02d] REPLAY   crash #%d not replayed: couldn't pause the race\n", st.wHour, st.wMinute, st.wSecond, c->id); return; }
+			if (!GamePause(g)) { Log("[%02d:%02d:%02d] REPLAY   %s not replayed: couldn't pause the race\n", st.wHour, st.wMinute, st.wSecond, HlLabel(*c).c_str()); return; }
 			pausedHere = true;
 		}
 		Log("[%02d:%02d:%02d] REPLAY   race paused for the replay (you're in your car)\n", st.wHour, st.wMinute, st.wSecond);
 	}
 	TrGuard tg;
-	TrBegin(tg, 0, "CRASH  -  " + CrashWho(*c, 2));
+	TrBegin(tg, 0, std::string(c->kind ? (c->what.empty() ? HlTitle(c->kind) : c->what.c_str()) : "CRASH") + "  -  " + CrashWho(*c, 2));
 	g_rp = ReplayRun(); g_tpManual = false;
 	g_rp.paused = pausedHere;
 	g_rp.crash = c->id; g_rp.byHand = byHand; g_rp.ticks0 = g.Get<int>(GAME_TICKS, 0);
-	g_rp.takes = BuildTakes(*c, angles > 0 ? angles : S.replayAngles);
-	if (S.replaySmart && angles <= 0 && g_rp.takes.size() == 1) {   // a lone angle: real speed first, then the same hit from another camera in slow motion
-		Take d = g_rp.takes[0];
-		std::vector<int> cams = S.cams["replay"];
-		for (int x : S.cams["replay_angles"]) if (std::find(cams.begin(), cams.end(), x) == cams.end()) cams.push_back(x);
-		d.cam = -1;
-		for (size_t j = 0; j < cams.size() && d.cam < 0; j++) if (cams[j] != g_rp.takes[0].cam) d.cam = cams[j];
-		if (d.cam < 0) d.cam = g_rp.takes[0].cam;
+	g_rp.takes = c->kind ? HighlightTakes(*c) : BuildTakes(*c, angles > 0 ? angles : S.replayAngles);
+	// smart slow motion: ONE slow look, last, after the real-speed angles - only for a big hit (its hardest single damage
+	// jump replay_slow_impact or more) or a photo finish, and never for a pass. It is the hardest hit, from the best
+	// angle: the first replay camera (user, 2026-11-11: not every crash, and not a second angle of each)
+	bool slowOk = c->kind == HL_CRASH ? c->impact >= S.replaySlowImpact && c->impactCar >= 0 && c->impactAt >= 0
+	                                  : c->kind == HL_FINISH && c->score >= 8.5;
+	if (S.replaySmart && angles <= 0 && slowOk && !g_rp.takes.empty()) {
+		Take d;
+		d.car = c->kind == HL_CRASH ? c->impactCar : g_rp.takes[0].car;
+		d.guide = c->kind == HL_CRASH ? c->impactAt : g_rp.takes[0].guide;
+		const std::vector<int> &cams = S.cams["replay"];
+		d.cam = !cams.empty() ? cams[0] : g_rp.takes[0].cam;
+		d.pre = 2.0; d.len = d.pre + 4.0; d.slow = true;
 		g_rp.takes.push_back(d);
 	}
 	for (int k = 0; k < (int)g_rp.takes.size(); k++)          // a take that can't roll (off the tape): the next one
@@ -2863,16 +2947,15 @@ static void ReplayTick(Game &g) {
 		const Crash *cr = CrashById(g_rp.crash);
 		double worth = cr ? Worth(*cr) : 3;
 		int nMax = S.replaySlowMax;
-		if (worth < 2) nMax = std::min(nMax, 2); else if (worth < 5) nMax = std::min(nMax, 4);
+		if (cr && cr->kind) nMax = std::min(nMax, cr->kind == HL_FINISH ? 4 : 2);   // a pass, a bump: a gentle slow look
+		else if (worth < 2) nMax = std::min(nMax, 2); else if (worth < 5) nMax = std::min(nMax, 4);
 		double d = (idx - g_rp.guideF) / (double)rate;           // seconds from the hit on the tape
 		int want = 0;
-		bool slowHere = g_rp.takes.size() > 1 && g_rp.take == 1;     // slow motion on one angle only: the second (the first is the real-speed look)
+		bool slowHere = cur.slow;                                  // the one slow-motion look (ReplayStart)
 		if (!slowHere) want = 0;
 		else if (d >= -1.6 && d < -0.8) want = 1;
 		else if (d >= -0.8 && d < -0.25) want = std::max(1, nMax / 2);
-		else if (d >= -0.25 && d < 1.4) want = nMax;
-		else if (d >= 1.4 && d < 2.4) want = std::max(1, nMax / 2);
-		else if (d >= 2.4 && d < 3.4) want = 1;
+		else if (d >= -0.25 && d < 1.4) want = nMax;              // ...and straight back to full speed after the hit
 		if (want != g_rp.curN) { g_rp.curN = want; if (want) TpSetSpeed(g, want, true); else TpSetSpeed(g, 1, false); }
 	}
 	bool stopped = false;
@@ -2896,7 +2979,7 @@ static void ReplayTick(Game &g) {
 			bool camOk = nx.car >= 0 && g.Set(nx.cam, nx.car, true);
 			if (camOk && nx.cam >= 0) g_lastCam = nx.cam;
 			g_rp.take = k; g_rp.car = nx.car; g_rp.cam = nx.cam; g_rp.at = now; g_rp.tape0 = tapeNow; g_rp.stopSince = -1;
-			g_rp.len = nx.guide - tapeNow + nx.len - S.replayPreroll;      // (its hit still to come: no preroll needed)
+			g_rp.len = nx.guide - tapeNow + nx.len - Pre(nx);      // (its hit still to come: no preroll needed)
 			g_rp.frame0 = idx; g_rp.endF = idx + (int)(g_rp.len * rate);
 			{ double gf = TapeFrameAt(nx.guide, rate); g_rp.guideF = gf >= 0 ? gf : idx + (nx.guide - tapeNow) * rate; }
 			Log("[%02d:%02d:%02d] REPLAY   angle %d of %d: %s, cam %d (%s), its hardest hit %.1fs on%s\n", st.wHour, st.wMinute, st.wSecond,
@@ -2999,12 +3082,19 @@ static void CrashWorthWatch() {
 		}
 }
 
-// the highlight reel: every crash worth a replay this race (on the tape), oldest first, reel_angles each
+// the highlight reel: every crash worth a replay this race (on the tape), and the other highlights (reel_highlights),
+// in race order, reel_angles each
 static void ReelStart() {
 	g_reel.clear();
-	for (auto &c : g_crashes) if (Worth(c) >= S.replayWorthy) g_reel.push_back(c.id);
+	std::vector<std::pair<double, int>> all;
+	int crashes = 0;
+	for (auto &c : g_crashes) if (Worth(c) >= S.replayWorthy) { all.push_back({ c.first, c.id }); crashes++; }
+	if (S.reelHighlights) for (auto &c : g_highs) all.push_back({ c.first, c.id });
+	std::stable_sort(all.begin(), all.end(), [](const std::pair<double, int> &a, const std::pair<double, int> &b) { return a.first < b.first; });
+	for (auto &x : all) g_reel.push_back(x.second);
 	SYSTEMTIME st; GetLocalTime(&st);
-	Log("[%02d:%02d:%02d] REPLAY   highlight reel: %d crash%s\n", st.wHour, st.wMinute, st.wSecond, (int)g_reel.size(), g_reel.size() == 1 ? "" : "es");
+	Log("[%02d:%02d:%02d] REPLAY   highlight reel: %d crash%s, %d other highlight%s\n", st.wHour, st.wMinute, st.wSecond,
+	    crashes, crashes == 1 ? "" : "es", (int)g_reel.size() - crashes, (int)g_reel.size() - crashes == 1 ? "" : "s");
 	g_reelNext = Now();
 }
 static void ReelTick(Game &g) {
@@ -4020,8 +4110,23 @@ static void DrawAlert(Graphics &gr, bool sample) {
 	if (!a.right.empty()) Text(gr, a.right, 106, 68, 15, a.kind == 1 ? ACCENT : GREY, true, StringAlignmentNear, 0, 340);
 }
 
+// RaceVision's overlays go and come back together with the companion apps' (hide_companion_overlays): all of them off the
+// moment a wipe starts (TransitionStart), and the live ones back only when the other apps' are (or, with that setting
+// off, half a second after the wipe back to live) - one change on screen, not two. The replay's own tag / dash / banner
+// show while the tape rolls between wipes.
+static bool WipeBusy();
+static bool CompanionsAway();
+static double g_ovBusyAt = -100;
+static void OvHideAll() { for (Panel *p : g_panels) Render(*p, false); }
+static bool OvHold() {
+	if (g_edit) return false;
+	if (WipeBusy()) { g_ovBusyAt = Now(); return true; }
+	if (g_rp.phase) return false;
+	return CompanionsAway() || Now() - g_ovBusyAt < 0.5;
+}
 static void UpdateOverlays() {
 	static int seenCar = -2, seenCam = -2, seenFlag = -2;
+	if (OvHold()) { OvHideAll(); return; }
 	static bool on = false;
 	static bool tag = false, box = false, gauges = false;
 	static double lastTag = -1e9;
@@ -4259,6 +4364,7 @@ static void CrowdTest() {
 #include "racevision_rig.cpp"
 #include "racevision_dyncams.cpp"
 #include "racevision_tape.cpp"
+#include "racevision_highlights.cpp"
 #include "racevision_remote.cpp"
 
 // ---------------------------------------------------------------- main
@@ -4353,7 +4459,9 @@ int main() {
 		{ "drone_height", "30" }, { "drone_quiet", "1" }, { "drone_distance", "100" }, { "drone_top_mph", "175" }, { "drone_hover_m", "25" }, { "rear_pan", "1" }, { "rear_pan_span", "110" }, { "rear_pan_fov", "105" },
 		{ "rear_mount", "1" }, { "rear_mount_m", "45" }, { "rear_hold_m", "70" }, { "rear_pass_m", "5" }, { "rear_block_s", "1.5" }, { "rear_pan_smooth", "0.45" }, { "replay_overlays", "1" }, { "replay_banner", "1" }, { "replay_smart", "1" }, { "replay_slow_max", "5" }, { "replay_transition", "1" }, { "replay_transition_ms", "1500" }, { "rear_alone", "11" }, { "replay_worthy", "1.5" }, { "replay_angles", "3" },
 		{ "replay_take", "8" }, { "replay_countdown", "5" }, { "reel_angles", "1" }, { "cam_replay_angles", "16, 5, 21" },
-		{ "replay_drive", "1" }, { "tv_cut_gap", "1.5" }, { "tv_cut_wait", "4" },
+		{ "replay_drive", "1" }, { "highlights", "1" }, { "multi_pass_cars", "2" }, { "highlight_gap", "180" },
+		{ "bump_run_window", "3" }, { "bump_run_depth", "10" }, { "superspeedways", "daytona; talladega" }, { "replay_slow_impact", "1.0" }, { "highlight_bump", "1" }, { "highlight_preroll", "6" }, { "replay_finish", "1" },
+		{ "replay_finish_after", "6" }, { "reel_highlights", "1" }, { "tv_cut_gap", "1.5" }, { "tv_cut_wait", "4" },
 		{ "dyn_cams", "0" }, { "dyn_pit", "1" }, { "dyn_crash", "1" }, { "dyn_restart", "1" }, { "dyn_battle", "1" }, { "dyn_finish", "1" },
 		{ "dyn_learn", "1" }, { "dyn_chance", "60" }, { "dyn_half_width", "0" }, { "dyn_yaw_fix", "0" }, { "dyn_pitch_sign", "1" },
 		{ "dyn_rig", "1" }, { "dyn_autozoom", "1" }, { "dyn_smooth", "1" } };
@@ -4373,7 +4481,7 @@ int main() {
 	}
 	if (__argc > 2 && strcmp(__argv[1], "--selftest") == 0) {    // format checks, no game needed: results to the file
 		FILE *o = fopen(__argv[2], "w");
-		if (o) { CsSelfTest(o); std::string tr = __argc > 3 ? __argv[3] : "bristol_night_RR"; DynSelfTest(o, tr); RigSelfTest(o); if (__argc > 4) CsDumpSamples(__argv[4], tr); fclose(o); }
+		if (o) { CsSelfTest(o); std::string tr = __argc > 3 ? __argv[3] : "bristol_night_RR"; DynSelfTest(o, tr); RigSelfTest(o); HlSelfTest(o); if (__argc > 4) CsDumpSamples(__argv[4], tr); fclose(o); }
 		GdiplusShutdown(gtok);
 		return 0;
 	}
@@ -4538,7 +4646,7 @@ int main() {
 			if (!g_paused && !g_rp.phase && now - lastDecide > 0.25) {
 				lastDecide = now; Direct(g);
 				static double lastAuto = 0;
-				if (now - lastAuto > 0.5) { lastAuto = now; ReplayAuto(g); }
+				if (now - lastAuto > 0.5) { lastAuto = now; ReplayAuto(g); if (!g_rp.phase) FinishAuto(g); }
 			} else if (g_paused && !g_rp.phase && now - lastDecide > 0.25) {
 				lastDecide = now; FollowPicked(g, true);         // directing paused: the overlays still follow the car you pick
 			}

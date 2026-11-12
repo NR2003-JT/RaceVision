@@ -12,14 +12,14 @@
 // The map: RaceControl's map.json when there is one; else RaceVision learns one from the cars (lap distance bins).
 static std::string J(const std::string &ansi);       // racevision_remote.cpp
 static std::string DynLiveJson();                    // racevision_dyncams.cpp
-static bool DynPoseFor(int cam, float *pose, std::string &label);
+static bool DynPoseFor(int cam, float *pose, std::string &label, std::string &key);
 
 enum TlSrc { tlCut, tlCamera, tlPicked, tlQual, tlReplay, tlDrive, tlTv, tlSetting, tlStart };
 static const char *TL_SRC[] = { "cut", "camera", "picked", "qualifying", "replay", "drive", "tv", "setting", "start" };
 struct TlEvent {
 	double t = 0; std::string wall; int lap = 0, flag = 0, car = -1, num = 0, cam = -1, base = -1, tg = -1, tn = 0, kind = 0, src = 0, other = -1;
 	float x = 0, y = 0, d = -1; double best = -1, cur = -1; std::string why, note;
-	bool dyn = false; float dpose[5] = {}; std::string dlabel;   // a dynamic camera: where it stood (x, y, z, yaw, lens) and what it was
+	bool dyn = false; float dpose[5] = {}; std::string dlabel, dkey;   // a dynamic camera: where it stood (x, y, z, yaw, lens), what it was, its angle (thumbs later)
 };
 struct TlSample { double t; int flag, car, cam; std::vector<unsigned char> slot; std::vector<float> xy; };
 static std::vector<TlEvent> g_tlEv;
@@ -56,7 +56,7 @@ static std::string TlEventJson(const TlEvent &e) {
 	         e.t, e.wall.c_str(), e.lap, e.flag, e.car, e.car >= 0 ? NumLabel(e.num).c_str() : "", e.cam, e.base, e.tg, e.tn,
 	         KindName[e.kind], TL_SRC[e.src], e.other, e.x, e.y, e.d, e.best, e.cur);
 	std::string dynj;
-	if (e.dyn) { char d[200]; snprintf(d, sizeof d, ",\"dyn\":{\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"yaw\":%.4f,\"fov\":%.1f}", e.dpose[0], e.dpose[1], e.dpose[2], e.dpose[3], e.dpose[4]); dynj = d; }
+	if (e.dyn) { char d[200]; snprintf(d, sizeof d, ",\"dyn\":{\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"yaw\":%.4f,\"fov\":%.1f}", e.dpose[0], e.dpose[1], e.dpose[2], e.dpose[3], e.dpose[4]); dynj = d; dynj += ",\"dkey\":" + J(e.dkey); }
 	return b + std::string("\"name\":") + J(e.car >= 0 ? Name(e.car) : "") + ",\"camName\":" + J(e.dyn ? e.dlabel : e.cam >= 0 ? CamName(e.cam) : "") +
 	       ",\"why\":" + J(e.why) + ",\"note\":" + J(e.note) + dynj + "}";
 }
@@ -233,7 +233,7 @@ static void TlAdd(Game &g, TlEvent e) {
 		e.d = CarDlong(g, e.car);
 	}
 	if (e.cam >= 0) e.base = GameCam(e.cam);
-	if (e.cam >= 0) { std::string lb; if (DynPoseFor(e.cam, e.dpose, lb)) { e.dyn = true; e.dlabel = lb; } }
+	if (e.cam >= 0) { std::string lb, key; if (DynPoseFor(e.cam, e.dpose, lb, key)) { e.dyn = true; e.dlabel = lb; e.dkey = key; } }
 	if (Now() - g_tlNoteAt < 1.5 && e.note.empty()) { e.note = g_tlNote; g_tlNote.clear(); g_tlNoteAt = -100; }
 	g_tlEv.push_back(e);
 	TlWrite("e", TlEventJson(e));

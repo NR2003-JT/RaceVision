@@ -57,20 +57,22 @@ static std::string UrlDecode(const std::string &s) {
 	return o;
 }
 
-// ---- the replays list: every crash logged this race, best first, with what is playing now
+// ---- the replays list: every crash and highlight logged this race, best first, with what is playing now
 static std::string ReplaysJson() {
 	std::string o = "{\"crashes\":[";
 	char b[256];
 	EnterCriticalSection(&g_lock);
 	std::vector<const Crash *> list;
 	for (auto &c : g_crashes) list.push_back(&c);
+	for (auto &c : g_highs) list.push_back(&c);
 	std::sort(list.begin(), list.end(), [](const Crash *x, const Crash *y) { return Worth(*x) > Worth(*y); });
 	bool first = true;
 	for (const Crash *c : list) {
 		snprintf(b, sizeof b, "{\"id\":%d,\"lap\":%d,\"cars\":%d,\"damage\":%.2f,\"worth\":%.1f,\"worthy\":%s,\"replayed\":%s,\"ago\":%.0f,",
-		         c->id, c->lap, (int)c->cars.size(), c->damage, Worth(*c), B(Worth(*c) >= S.replayWorthy), B(c->replayed),
+		         c->id, c->lap, (int)c->cars.size(), c->damage, Worth(*c), B(c->kind || Worth(*c) >= S.replayWorthy), B(c->replayed),
 		         std::max(0.0, g_simT - c->first));
-		o += std::string(first ? "" : ",") + b + "\"who\":" + J(CrashWho(*c, 5)) + "}";
+		o += std::string(first ? "" : ",") + b + "\"who\":" + J(CrashWho(*c, 5)) + ",\"kind\":\"" + HlKey(c->kind) + "\",\"what\":" +
+		     J(c->kind ? c->what : std::string()) + "}";
 		first = false;
 	}
 	snprintf(b, sizeof b, "],\"playing\":%d,\"take\":%d,\"takes\":%d,\"reel\":%d,\"plan\":%d,\"inCar\":%s}",

@@ -724,12 +724,18 @@ function renderOnAir() {
   $("oaTvBar").style.width = (tv * 100).toFixed(0) + "%";
   $("oaAge").textContent = age;
   $("oaWait").classList.toggle("show", !scrub && !!L.waiting);
-  const dy = !scrub && L.dyn && L.dyn.on;
-  $("oaRate").classList.toggle("show", !!dy);
-  if (dy) $("oaDynLbl").textContent = L.dynLabel || "Dynamic camera";
+  // thumbs: the dynamic angle on air; the one that just went (for a minute after - quick ones pass before you can
+  // rate them); or, scrubbed back on the timeline, the dynamic angle on air then (click its event in the list)
+  if (!scrub && L.dyn && L.dyn.on) { rateFor = { key: L.dyn.key, label: L.dynLabel || "Dynamic camera", now: true }; lastDyn = { ...rateFor, now: false, gone: 0 }; }
+  else if (!scrub && lastDyn) { if (!lastDyn.gone) lastDyn.gone = performance.now(); rateFor = performance.now() - lastDyn.gone < 60000 ? lastDyn : null; }
+  else if (scrub) { const e = (shotAt(st.scrubT) || {}).e; rateFor = e && e.dkey ? { key: e.dkey, label: e.camName || "Dynamic camera", then: true } : null; }
+  else rateFor = null;
+  $("oaRate").classList.toggle("show", !!rateFor);
+  if (rateFor) $("oaDynLbl").textContent = (rateFor.now ? "" : rateFor.then ? "Then: " : "Just now: ") + rateFor.label;
 }
+var rateFor = null, lastDyn = null;     // (var: renderOnAir may run before this line)
 const dynLabelNow = () => st.scrubT != null ? ((shotAt(st.scrubT) || {}).e || {}).camName : (st.live && st.live.dynLabel);
-async function rate(v) { try { await apiPost("dyn/rate", { v }); toast(v > 0 ? "Noted - more angles like this one." : "Noted - fewer angles like this one."); pollLearned(); } catch (e) { toast(e.message); } }
+async function rate(v) { const r = rateFor; if (!r) return; try { await apiPost("dyn/rate", { v, key: r.key }); toast((r.now ? "" : r.label + " - ") + (v > 0 ? "Noted - more angles like this one." : "Noted - fewer angles like this one.")); pollLearned(); } catch (e) { toast(e.message); } }
 $("rateUp").onclick = () => rate(1); $("rateDn").onclick = () => rate(-1);
 async function pollLearned() { try { lrn = await apiJ("dyn"); } catch (e) {} }
 setInterval(() => { if (opt.learned && st.mode === "live") pollLearned(); }, 20000);

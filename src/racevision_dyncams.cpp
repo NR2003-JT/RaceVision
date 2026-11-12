@@ -818,10 +818,10 @@ static std::string DynLiveJson() {                                  // part of /
 	else snprintf(b, sizeof b, "\"dynOn\":%s,\"dyn\":null,", S.dynCams ? "true" : "false");
 	return b + std::string("\"dynLabel\":") + J(g_dyn.on ? g_dyn.label : "") + ",";
 }
-static bool DynPoseFor(int cam, float *pose, std::string &label) {  // the timeline's events carry where the camera stood
+static bool DynPoseFor(int cam, float *pose, std::string &label, std::string &key) {  // the timeline's events carry where the camera stood, and which angle (to rate it later)
 	if (!g_dyn.on || cam != g_dyn.camId) return false;
 	pose[0] = g_dyn.cx; pose[1] = g_dyn.cy; pose[2] = g_dyn.cz; pose[3] = g_dyn.yaw; pose[4] = g_dyn.fov;
-	label = g_dyn.label; return true;
+	label = g_dyn.label; key = g_dyn.key; return true;
 }
 static std::string DynInfoBody(Game &g);
 static std::string DynInfoJson(Game &g) { EnterCriticalSection(&g_lock); std::string o = DynInfoBody(g); LeaveCriticalSection(&g_lock); return o; }
@@ -885,8 +885,12 @@ static std::string DynApi(Game &g, const std::string &what, std::map<std::string
 	if (what == "test") err = DynTest(g);
 	else if (what == "rate") {
 		int v = atoi(q["v"].c_str());
-		std::string key = g_dyn.on ? g_dyn.key : g_dynLastKey;
+		// key: a shot already gone (picked on the timeline, or the one that just passed); else the one on air / the last
+		std::string key = !q["key"].empty() ? q["key"] : g_dyn.on ? g_dyn.key : g_dynLastKey;
+		bool known = false;
+		for (const DynT &t : DYN_T) for (int s : { 1, -1 }) if (key == std::string(t.id) + "|" + DynSideName(s)) known = true;
 		if (key.empty()) err = "no dynamic shot to rate yet";
+		else if (!known) err = "that angle isn't one RaceVision knows";
 		else {
 			// a thumbs down also pulls that angle in on this track (the scenery is out there); a thumbs up lets it back out
 			std::string id = key.substr(0, key.find('|'));

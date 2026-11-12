@@ -103,11 +103,12 @@ static void TpSeekFrame(Game &g, double frame) {
 	g.MainThreadCall(FN_TP_SEEK, a0, 0, 0);                      // (it leaves the tape paused)
 	if (step != 0) TpSetSpeed(g, step, slow);                    // ...so a tape that was rolling rolls on at its speed
 }
-static double TpCrashFrame(int id, int rate) {
+static double TpCrashFrame(int id, int rate) {             // (a highlight too: from where its replay starts)
 	Crash *c = CrashById(id);
 	if (!c) return -1;
 	double f = TapeFrameAt(c->impactAt >= 0 ? c->impactAt : c->first, rate);
-	return f >= 0 ? f - S.replayPreroll * rate : -1;
+	double pre = !c->kind ? S.replayPreroll : c->kind == HL_FINISH ? std::max(S.hlPreroll, 8.0) : S.hlPreroll;
+	return f >= 0 ? f - pre * rate : -1;
 }
 static void TpDo(Game &g, const TpReq &r) {
 	std::string why;
@@ -142,10 +143,11 @@ static void TpDo(Game &g, const TpReq &r) {
 	} else if (r.op == "crash") {
 		double f = TpCrashFrame(r.n, rate);
 		if (f < 0) TpSay("that crash isn't on the tape"); else TpSeekFrame(g, f);
-	} else if (r.op == "jump") {                              // next / previous mark of a kind: n = +-1, v = 'L' / 'C' / 'F'
+	} else if (r.op == "jump") {                              // next / previous mark of a kind: n = +-1, v = 'L' / 'C' / 'H' / 'F'
 		char kind = (char)r.v;
 		std::vector<std::pair<double, int>> at;               // frame, crash id
 		if (kind == 'C') { for (auto &c : g_crashes) { double f = TpCrashFrame(c.id, rate); if (f >= 0) at.push_back({ f, c.id }); } }
+		else if (kind == 'H') { for (auto &c : g_highs) { double f = TpCrashFrame(c.id, rate); if (f >= 0) at.push_back({ f, c.id }); } }
 		else for (auto &m : g_tpMarks) if (m.type == kind) at.push_back({ (double)m.frame - (kind == 'L' ? rate : 0), 0 });
 		std::sort(at.begin(), at.end());
 		double to = -1;
@@ -191,6 +193,10 @@ static std::string TpJson(Game *g) {
 	for (auto &c : g_crashes) {
 		double f = TapeFrameAt(c.impactAt >= 0 ? c.impactAt : c.first, rate);
 		add(f, 'C', "CRASH  " + CrashWho(c, 2), c.id);
+	}
+	for (auto &c : g_highs) {                                 // the other highlights: passes, bump and runs, the finish
+		double f = TapeFrameAt(c.impactAt >= 0 ? c.impactAt : c.first, rate);
+		add(f, 'H', (c.what.empty() ? std::string(HlTitle(c.kind)) : c.what) + "  " + CrashWho(c, 2), c.id);
 	}
 	o += "]}";
 	LeaveCriticalSection(&g_lock);
@@ -294,6 +300,7 @@ static void CompanionHide() {
 	g_coOn = true; g_coOffSince = 0; g_coScanAt = Now();
 	Log("           other programs' overlays hidden (%d window%s)\n", (int)g_coHidden.size(), g_coHidden.size() == 1 ? "" : "s");
 }
+static bool CompanionsAway() { return g_coOn; }
 static void CompanionShow() {
 	if (!g_coOn) return;
 	g_coOn = false;                                          // (the guard stops first)
@@ -474,6 +481,7 @@ static DWORD WINAPI WipeThread(LPVOID) {
 static void TransitionStart(int kind, const std::string &sub) {
 	if (!S.replayTransition || g_wp.busy) return;
 	if (kind != 1) CompanionHide();                           // (the screen is about to be a replay: out of the way before the wipe)
+	OvHideAll(); g_ovBusyAt = Now();                          // RaceVision's own overlays in the same moment (UpdateOverlays keeps them off)
 	if (!g_wp.th) {
 		g_wp.evGo = CreateEvent(NULL, FALSE, FALSE, NULL);
 		g_wp.evCover = CreateEvent(NULL, TRUE, FALSE, NULL);

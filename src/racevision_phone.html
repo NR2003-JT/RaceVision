@@ -294,6 +294,7 @@ body.pairing { padding-bottom: 0; }
 .tp-marks i { position: absolute; top: 0; width: 2px; height: 8px; background: #5b6272; }
 .tp-marks i.f { background: var(--gold); }
 .tp-marks i.c { background: var(--red); width: 3px; height: 14px; }
+.tp-marks i.h { background: #4fa3ff; width: 3px; height: 14px; }
 .tp input[type=range] { width: 100%; margin: 0; accent-color: var(--gold); }
 .tp-row { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
 .tp-row .btn { flex: 1 1 0; padding: 11px 4px; font-size: 14px; text-align: center; min-width: 0; }
@@ -425,13 +426,17 @@ body.pairing { padding-bottom: 0; }
       <div class="tp-row">
         <button class="btn" data-tp="jump" data-k="C" data-d="-1">&lt; Crash</button>
         <button class="btn" data-tp="jump" data-k="C" data-d="1">Crash &gt;</button>
+        <button class="btn" data-tp="jump" data-k="H" data-d="-1">&lt; Highlight</button>
+        <button class="btn" data-tp="jump" data-k="H" data-d="1">Highlight &gt;</button>
+      </div>
+      <div class="tp-row">
         <button class="btn" data-tp="jump" data-k="L" data-d="-1">&lt; Lap</button>
         <button class="btn" data-tp="jump" data-k="L" data-d="1">Lap &gt;</button>
       </div>
       <div class="tp-lap">Go to lap <input type="number" id="tpLap" min="1" inputmode="numeric"><button class="btn" id="tpGo">Go</button></div>
       <div class="tp-note" id="tpNote"></div>
     </div>
-    <div class="hint">Every crash this race, the ones most worth showing first. Tap one to replay it (you out of your car). The highlight reel plays every crash worth a replay, oldest first.</div>
+    <div class="hint">Every crash this race, and the other highlights (passes for the front, multi-passes, bump and runs, the finish), the ones most worth showing first. Tap one to replay it (you out of your car). The highlight reel plays them all in race order.</div>
     <div class="rp-now"><button class="btn gold" id="breel">Highlight reel</button><button class="btn" id="brlive">Back to live</button></div>
     <div id="rpstate" class="hint"></div>
     <div id="replays"></div>
@@ -860,7 +865,7 @@ async function tpPoll() {
       const key = t.frames + ":" + t.marks.length;
       if (key !== tpMarksKey) {
         tpMarksKey = key;
-        $("tpMarks").innerHTML = t.marks.map(m => `<i class="${m.t === "C" ? "c" : m.t === "F" ? "f" : ""}" style="left:${(100 * m.f / Math.max(1, t.frames - 1)).toFixed(2)}%" title="${esc(m.l)}"></i>`).join("");
+        $("tpMarks").innerHTML = t.marks.map(m => `<i class="${m.t === "C" ? "c" : m.t === "H" ? "h" : m.t === "F" ? "f" : ""}" style="left:${(100 * m.f / Math.max(1, t.frames - 1)).toFixed(2)}%" title="${esc(m.l)}"></i>`).join("");
       }
     } else $("tpPos").textContent = "";
     const slowN = t.slow ? Math.abs(t.step) : 0;
@@ -892,7 +897,7 @@ $("tpSlow").addEventListener("input", e => { tpDrag = true; const n = +e.target.
 $("tpSlow").addEventListener("change", e => { tpDrag = false; const n = +e.target.value; tpSend(n ? { do: "slow", n } : { do: "play" }); });
 $("tpGo").onclick = () => { const n = parseInt($("tpLap").value, 10); if (n > 0) tpSend({ do: "lap", n }); };
 
-// ---- replays: the crash list, play one, the highlight reel
+// ---- replays: the crash and highlight list, play one, the highlight reel
 let lastReplays = "";
 async function replaysPoll() {
   clearTimeout(replaysPoll.t);
@@ -905,9 +910,9 @@ async function replaysPoll() {
       const ago = s => s < 90 ? Math.round(s) + "s ago" : Math.round(s / 60) + " min ago";
       $("replays").innerHTML = r.crashes.length ? '<div class="list">' + r.crashes.map(c =>
         `<button class="row${r.playing === c.id ? " tv" : ""}" data-crash="${c.id}"><span class="kind ${c.worthy ? "worthy" : "seen"}">LAP ${gameLap(c.lap, S.laps)}</span>` +
-        `<span class="name">${esc(c.who)}<span class="why">${c.cars} car${c.cars === 1 ? "" : "s"}  ·  damage ${c.damage.toFixed(2)}  ·  ${ago(c.ago)}${c.replayed ? "  ·  shown" : ""}</span></span>` +
+        `<span class="name">${esc(c.who)}<span class="why">${c.kind && c.kind !== "crash" ? esc(c.what) : c.cars + " car" + (c.cars === 1 ? "" : "s") + "  ·  damage " + c.damage.toFixed(2)}  ·  ${ago(c.ago)}${c.replayed ? "  ·  shown" : ""}</span></span>` +
         `${r.playing === c.id ? '<span class="tag tv">ON</span>' : ""}</button>`).join("") + "</div>"
-        : `<div class="empty">No crashes logged this race yet.</div>`;
+        : `<div class="empty">No crashes or highlights logged this race yet.</div>`;
       $("rpstate").textContent = r.playing >= 0 ? (r.reel ? "Highlight reel  ·  " : "Replaying  ·  ") + "angle " + r.take + " of " + r.takes
         : r.plan >= 0 ? "A replay is counting down." : r.inCar ? "You're in your car: replays wait until you're out." : "";
     }

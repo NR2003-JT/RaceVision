@@ -72,7 +72,8 @@ static const Section SECTIONS[] = {
 	{ pDirector, 0, "SHOTS" }, { pDirector, 262, "WHEN YOU TAKE OVER" },
 	{ pBattles, 0, "BATTLES" }, { pBattles, 186, "START AND RESTARTS" }, { pBattles, 362, "LEAD BATTLES" }, 
 	{ pReplays, 0, "FINDING CRASHES" }, { pReplays, 264, "AUTOMATIC REPLAYS" }, { pReplays, 528, "HOW A REPLAY IS SHOT" },
-	{ pReplays, 792, "PLAY" }, { pReplays, 980, "CRASHES THIS RACE" }, { pReplays, 1722, "SLOW MOTION, WIPE AND PLAYBACK" },
+	{ pReplays, 792, "PLAY" }, { pReplays, 980, "CRASHES AND HIGHLIGHTS THIS RACE" }, { pReplays, 1722, "SLOW MOTION, WIPE AND PLAYBACK" },
+	{ pReplays, 2280, "OTHER HIGHLIGHTS" },
 	{ pCameras, 0, "CAMERAS PER SHOT" }, { pCameras, 574, "CAMERA CHANGES" }, { pCameras, 762, "OWN ANGLES (TEST)" }, { pCameras, 1482, "DRONE" }, { pCameras, 1680, "DYNAMIC CAMERAS (TEST)" },
 	{ pOverlays, 0, "GRAPHICS" }, { pOverlays, 186, "WHEN THEY SHOW" }, { pOverlays, 602, "PREVIEW (SAMPLE CAR)" },
 	{ pArt, 0, "ART FOLDERS" }, { pArt, 262, "SERIES" },
@@ -149,7 +150,8 @@ static void AddFields() {
 	F(pReplays, "replay_now", "Replay the best crash", "The one most worth showing lately (again: back to live).", fAction, 0, 818, 414, 150, "Replay crash");
 	F(pReplays, "replay_live", "Back to live", "End a replay or the reel now.", fAction, 430, 818, 414, 150, "Back to live");
 	F(pReplays, "replay_drive", "Watch while driving: pause", "Ctrl+F7 or a replay button while in your car pauses the race, plays the replay, then resumes.", fToggle, 430, 894);
-	F(pReplays, "replay_smart", "Smart slow motion", "Crash replays slow down into the hit and speed up after it, with the game's own slow motion.", fToggle, 0, 1748);
+	F(pReplays, "replay_smart", "Smart slow motion", "A big crash gets one slow-motion look at its hardest hit (the game's own slow motion), back to full speed right after it. Passes never do.", fToggle, 0, 1748);
+	F(pReplays, "replay_slow_impact", "Slow motion from a hit of", "Only a crash whose hardest single hit is this big gets a slow-motion look: one, of that hit, from the first replay camera, after the real-speed angles.", fNum, 430, 2610);
 	F(pReplays, "replay_slow_max", "Slowest speed (1 - 16)", "A big hit gets this slow: 1 = 1/2 speed ... 16 = 1/17. Smaller hits stay gentler.", fNum, 430, 1748);
 	F(pReplays, "replay_transition", "Replay wipe", "A full-screen TV wipe into a replay, between its angles and back to live.", fToggle, 0, 1824);
 	F(pReplays, "replay_transition_ms", "Wipe length (ms)", "How long the whole wipe takes: 400 - 5000. 1500 is the default; higher is slower.", fNum, 430, 1824);
@@ -163,7 +165,18 @@ static void AddFields() {
 	F(pReplays, "tp_fwd", "Playback: one frame forward", "Step the tape forward one frame.", fAction, 430, 2128, 414, 150, "Frame forward");
 	F(pReplays, "tp_slower", "Playback: slower", "One step slower: 1/2, 1/3 ... 1/17.", fAction, 0, 2204, 414, 150, "Slower");
 	F(pReplays, "tp_faster", "Playback: faster", "One step faster: back to normal, then x2, x4.", fAction, 430, 2204, 414, 150, "Faster");
-	F(pReplays, "replay_reel", "Highlight reel", "Every crash worth a replay this race, oldest first.", fAction, 0, 894, 414, 150, "Highlight reel");
+	F(pReplays, "replay_reel", "Highlight reel", "Every crash worth a replay this race, and the other highlights, in race order.", fAction, 0, 894, 414, 150, "Highlight reel");
+	F(pReplays, "highlights", "Find other highlights", "Passes for the front, one car by several in a row, bump and runs and the finish go on the list below, the phone and the reel.", fToggle, 0, 2306);
+	F(pReplays, "highlight_gap", "At most one pass every (s)", "Passes, multi-passes and bump and runs: the better one in this many game seconds stays. The last lap is free.", fNum, 430, 2306);
+	F(pReplays, "multi_pass_cars", "Multi-pass: cars", "One car by this many cars in one corner or one straight. Last-lap passes for the podium count too.", fNum, 0, 2382);
+	F(pReplays, "superspeedways", "Superspeedways", "Track folder names (part of one; ; between). Multi-passes there count only on the last lap.", fText, 430, 2382, 414, 120);
+	F(pReplays, "highlight_bump", "Bump and runs", "The nose of the car behind hits the tail of the one ahead (no crash) and it gets by.", fToggle, 0, 2458);
+	F(pReplays, "bump_run_window", "Bump and run: by within (s)", "It gets by within this many seconds of the hit.", fNum, 0, 2686);
+	F(pReplays, "bump_run_depth", "Bump and run: for P1 to", "Only for this position or better.", fNum, 430, 2686);
+	F(pReplays, "highlight_preroll", "Start before the moment (s)", "Highlight replays start this long before the pass or the bump.", fNum, 430, 2458);
+	F(pReplays, "replay_finish", "Replay the finish", "Once the winner and the runner-up are across the line, the finish plays by itself (not while you drive).", fToggle, 0, 2534);
+	F(pReplays, "replay_finish_after", "...after (s)", "How long after the runner-up crosses the line.", fNum, 430, 2534);
+	F(pReplays, "reel_highlights", "Highlights in the reel", "The highlight reel plays these with the crashes. Off = crashes only.", fToggle, 0, 2610);
 
 	for (int r = 0; r < (int)(sizeof CAM_ROWS / sizeof CAM_ROWS[0]); r++) {
 		F(pCameras, (std::string("cam_") + CAM_ROWS[r].key).c_str(), "", "", fCams, 180, 64 + r * 40, 0, 130);
@@ -759,13 +772,16 @@ static std::string CamList(const std::string &v) {
 static const int RL_Y = 1006, RL_ROW = 34, RL_ROWS = 10, RLOG_Y = RL_Y + 52 + RL_ROWS * RL_ROW + 24;
 static std::vector<int> g_rlistIds;                      // the crash under each row, as last painted
 static void PaintReplays(HDC dc) {
-	struct Row { int id, lap, cars; double worth, damage, ago; bool replayed, playing, worthy; std::string who; };
+	struct Row { int id, lap, cars; double worth, damage, ago; bool replayed, playing, worthy; std::string who; int kind; };
 	std::vector<Row> rows;
 	std::vector<std::string> log;
 	EnterCriticalSection(&g_lock);
 	for (auto &c : g_crashes)
 		rows.push_back({ c.id, c.lap, (int)c.cars.size(), Worth(c), c.damage, std::max(0.0, g_simT - c.first), c.replayed,
-		                 g_rp.phase && g_rp.crash == c.id, Worth(c) >= S.replayWorthy, CrashWho(c, 4) });
+		                 g_rp.phase && g_rp.crash == c.id, Worth(c) >= S.replayWorthy, CrashWho(c, 4), HL_CRASH });
+	for (auto &c : g_highs)
+		rows.push_back({ c.id, c.lap, (int)c.cars.size(), Worth(c), 0, std::max(0.0, g_simT - c.first), c.replayed,
+		                 g_rp.phase && g_rp.crash == c.id, true, c.what + ":  " + CrashWho(c, 3), c.kind });
 	LeaveCriticalSection(&g_lock);
 	EnterCriticalSection(&g_logLock);
 	log = g_replayLog;
@@ -778,7 +794,7 @@ static void PaintReplays(HDC dc) {
 	UText(dc, "SCORE", UCX + 650, UCY + RL_Y + 12, 60, 16, fSection, U_MUTED);
 	UText(dc, "CLICK TO PLAY", UCX + 720, UCY + RL_Y + 12, 120, 16, fSection, U_MUTED);
 	g_rlistIds.clear();
-	if (rows.empty()) UText(dc, "No crashes logged this race yet.", UCX + 16, UCY + RL_Y + 48, 500, 20, fLabel, U_MUTED);
+	if (rows.empty()) UText(dc, "No crashes or highlights logged this race yet.", UCX + 16, UCY + RL_Y + 48, 500, 20, fLabel, U_MUTED);
 	for (size_t i = 0; i < rows.size() && (int)i < RL_ROWS; i++) {
 		const Row &r = rows[i];
 		int y = UCY + RL_Y + 38 + (int)i * RL_ROW;
@@ -786,10 +802,11 @@ static void PaintReplays(HDC dc) {
 		if (r.playing) URound(dc, UCX + 6, y, UCW - 12, RL_ROW - 4, 6, RGB(58, 50, 18));
 		COLORREF tc = r.worthy ? U_TEXT : U_MUTED;
 		UText(dc, std::to_string(r.lap), UCX + 16, y + 7, 50, 20, fLabel, tc);
-		std::string who = r.who + "  (" + std::to_string(r.cars) + (r.cars == 1 ? " car)" : " cars)");
+		std::string who = r.kind ? r.who : r.who + "  (" + std::to_string(r.cars) + (r.cars == 1 ? " car)" : " cars)");
 		UText(dc, who, UCX + 70, y + 7, 480, 20, fLabel, tc, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
 		char b[32];
-		snprintf(b, sizeof b, "%.2f", r.damage); UText(dc, b, UCX + 560, y + 7, 80, 20, fLabel, tc);
+		if (r.kind) snprintf(b, sizeof b, "-"); else snprintf(b, sizeof b, "%.2f", r.damage);
+		UText(dc, b, UCX + 560, y + 7, 80, 20, fLabel, tc);
 		snprintf(b, sizeof b, "%.1f", r.worth); UText(dc, b, UCX + 650, y + 7, 60, 20, fLabel, r.worthy ? U_GOLD : U_MUTED);
 		std::string st = r.playing ? "ON NOW" : r.replayed ? "shown" : r.worthy ? "play" : "play (minor)";
 		UText(dc, st, UCX + 720, y + 7, 120, 20, fLabel, r.playing ? U_GOLD : r.replayed ? U_MUTED : U_GREEN);
