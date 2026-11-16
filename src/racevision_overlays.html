@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0c10">
+<link rel="icon" href="/icon.png">
+<title>RaceVision Overlay Editor</title>
+<!-- RaceVision overlay layout editor: served by RaceVision itself (racevision_remote.cpp /overlays), built into the exe.
+     The picture on the stage is RaceVision's own drawing of the layout (POST /api/overlay/render), so it looks exactly
+     like it will on screen; the boxes over it are the elements, to drag and resize. Layouts are files in the app
+     folder's layouts\ (racevision_layout.cpp). -->
+<style>
+:root { --bg:#0e1015; --panel:#14171d; --card:#1a1d24; --card2:#22262f; --line:#2a2f39; --input:#0c0e12; --text:#eceff4; --muted:#868fa0; --dim:#5b6372; --gold:#ffc400; --green:#46c878; --red:#eb554b; --teal:#3cc8c8; --guide:#ff2d95; --cond:"Bahnschrift SemiBold Condensed","Roboto Condensed","Arial Narrow",system-ui,sans-serif; --lw:300px; --rw:340px; }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+body { display:grid; grid-template-rows:auto 1fr; height:100vh; overflow:hidden; }
+button, select, input, textarea { font:inherit; color:inherit; }
+button { border:0; background:none; padding:0; cursor:pointer; }
+header { display:flex; align-items:center; gap:10px; padding:8px 14px; background:#0b0c10; border-bottom:1px solid #1e2128; flex-wrap:wrap; }
+.mark { font:700 20px/1 var(--cond); letter-spacing:.5px; white-space:nowrap; } .mark b { color:var(--gold); } .mark span { color:var(--muted); font-size:15px; letter-spacing:1.5px; font-weight:600; }
+.hb { height:30px; padding:0 11px; border-radius:7px; background:var(--card2); font-weight:600; font-size:13px; white-space:nowrap; display:inline-flex; align-items:center; }
+a.hb { color:var(--text); text-decoration:none; }
+.hb:hover { background:#2b303b; } .hb.pri { background:var(--gold); color:#0c0e12; } .hb.pri:hover { background:#ffd23d; } .hb.warn { color:#ff9a90; } .hb[disabled] { opacity:.4; pointer-events:none; }
+.hb.sm { height:24px; padding:0 8px; font-size:12px; }
+.sp { flex:1; }
+select, input[type=text], input[type=number], textarea { background:var(--input); border:1px solid var(--line); border-radius:6px; padding:5px 7px; min-width:0; }
+select { padding:5px 4px; }
+input[type=number] { width:70px; }
+textarea { width:100%; resize:vertical; min-height:54px; font-family:Consolas,monospace; font-size:13px; }
+input[type=color] { width:30px; height:28px; padding:1px; border:1px solid var(--line); border-radius:6px; background:var(--input); }
+main { display:grid; grid-template-columns:var(--lw) 7px minmax(0,1fr) 7px var(--rw); min-height:0; }
+aside { background:var(--panel); min-height:0; overflow:auto; }
+#right { padding:10px 14px 60px; }
+.split { background:#0b0c10; cursor:col-resize; position:relative; border-left:1px solid var(--line); border-right:1px solid var(--line); }
+.split:hover, .split.on { background:var(--gold); }
+.split::after { content:""; position:absolute; left:1px; top:calc(50% - 14px); width:3px; height:28px; border-radius:2px; background:#3a4150; }
+details.sec { border-bottom:1px solid var(--line); }
+details.sec > summary { list-style:none; cursor:pointer; padding:11px 14px; font:700 12px/1 var(--cond); letter-spacing:1.5px; color:var(--muted); text-transform:uppercase; display:flex; align-items:center; gap:8px; user-select:none; }
+details.sec > summary::-webkit-details-marker { display:none; }
+details.sec > summary::before { content:"▸"; font-size:11px; color:var(--dim); transition:transform .12s; }
+details.sec[open] > summary::before { transform:rotate(90deg); }
+details.sec > summary .r { margin-left:auto; letter-spacing:.3px; text-transform:none; font-family:system-ui; font-weight:500; color:var(--dim); font-size:12px; }
+.secbody { padding:2px 12px 14px; }
+.lbl { font:700 11.5px/1 var(--cond); letter-spacing:1.4px; color:var(--muted); text-transform:uppercase; margin:2px 0 8px; display:flex; align-items:center; gap:8px; }
+#props .lbl { flex-wrap:wrap; row-gap:6px; }
+.grpbar { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.el .gtag { flex:none; font:700 10px var(--cond); letter-spacing:.6px; text-transform:uppercase; color:#cfb4ff; background:#2b2140; border-radius:4px; padding:2px 5px; max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.el .lk { flex:none; width:26px; height:26px; border-radius:6px; font-size:13px; color:var(--dim); } .el .lk.on { color:var(--gold); } .el .lk:hover { background:#333948; }
+.el.locked .nm b { color:#b8bfcc; }
+.box.locked { border-style:solid; border-color:rgba(255,255,255,.12); cursor:not-allowed; }
+.box.locked.sel { border-color:#8a7a2a; }
+#props.locked .f, #props.locked .pt { opacity:.55; }
+.lockbanner { background:#2a2410; border:1px solid #5b4d12; color:#ffd84a; border-radius:8px; padding:6px 9px; font-size:12.5px; margin:4px 0 8px; }
+.addrow { display:flex; gap:6px; margin-bottom:8px; } .addrow select { flex:1; }
+#elFilter { width:100%; margin-bottom:8px; }
+.el { display:flex; align-items:center; gap:9px; padding:8px 8px; margin:3px 0; border-radius:9px; cursor:pointer; border:1px solid transparent; background:rgba(255,255,255,.025); position:relative; }
+.el:hover { background:var(--card); } .el.sel { background:var(--card2); border-color:#4a5262; box-shadow:inset 3px 0 0 var(--gold); }
+.el.off .nm { opacity:.38; text-decoration:line-through; }
+.el.dropat { box-shadow:0 -2px 0 var(--gold); }
+.chip { flex:none; width:64px; text-align:center; font:700 10.5px/1 var(--cond); letter-spacing:.8px; text-transform:uppercase; padding:5px 0; border-radius:5px; color:#10131a; }
+.t-text{background:#6db3ff}.t-run{background:#7fd9f2}.t-rect{background:#b99cff}.t-image{background:#ffbe73}.t-portrait{background:#ff9bb0}.t-bar{background:#79e099}.t-segbar{background:#58d8b0}.t-arc{background:#f4d964}.t-dial{background:#e8b94a}.t-needle{background:#ffa968}.t-ordinal{background:#a8b3ff}
+.el .nm { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.el .nm b { font-weight:600; font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.el .nm small { color:var(--dim); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:Consolas,monospace; }
+.el .eye { flex:none; width:26px; height:26px; border-radius:6px; color:var(--muted); font-size:14px; } .el .eye:hover { background:#333948; color:var(--text); }
+#stageWrap { position:relative; overflow:auto; background:#0a0b0f; min-width:0; min-height:0; }
+.tools { position:sticky; top:0; left:0; z-index:8; display:flex; gap:10px; align-items:center; padding:7px 10px; background:rgba(14,16,21,.94); border-bottom:1px solid var(--line); flex-wrap:wrap; font-size:13px; }
+.tools label { display:flex; align-items:center; gap:5px; color:var(--muted); white-space:nowrap; }
+.tools .coord { margin-left:auto; font-family:Consolas,monospace; color:var(--teal); font-size:12.5px; min-width:150px; text-align:right; }
+#stagePad { padding:56px; display:inline-block; min-width:100%; }
+#stage { position:relative; display:block; background:#4a5a6e; background-image:linear-gradient(135deg,#566a82,#2e3a4a); box-shadow:0 0 0 1px #000, 0 0 0 6px rgba(255,255,255,.04); user-select:none; touch-action:none; }
+#stage.checker { background:conic-gradient(#2b2f38 25%,#20232b 0 50%,#2b2f38 0 75%,#20232b 0) 0 0/20px 20px; }
+#prev { position:absolute; left:0; top:0; pointer-events:none; }
+#grid { position:absolute; inset:0; pointer-events:none; display:none; }
+#boxes { position:absolute; left:0; top:0; }
+.box { position:absolute; border:1px dashed rgba(255,255,255,.28); cursor:move; }
+.box:hover { border-color:rgba(255,196,0,.8); background:rgba(255,196,0,.08); }
+.box.sel { border:1.5px solid var(--gold); background:rgba(255,196,0,.10); z-index:3; }
+.box.off { display:none; }
+.box.sel .h { position:absolute; width:9px; height:9px; background:var(--gold); border:1px solid #000; border-radius:2px; }
+.h.nw{left:-5px;top:-5px;cursor:nwse-resize}.h.n{left:calc(50% - 5px);top:-5px;cursor:ns-resize}.h.ne{right:-5px;top:-5px;cursor:nesw-resize}.h.e{right:-5px;top:calc(50% - 5px);cursor:ew-resize}.h.se{right:-5px;bottom:-5px;cursor:nwse-resize}.h.s{left:calc(50% - 5px);bottom:-5px;cursor:ns-resize}.h.sw{left:-5px;bottom:-5px;cursor:nesw-resize}.h.w{left:-5px;top:calc(50% - 5px);cursor:ew-resize}
+.f { display:grid; grid-template-columns:92px 1fr; gap:6px 8px; align-items:center; margin:7px 0; }
+.f > label { color:var(--muted); font-size:12.5px; }
+.f .row { display:flex; gap:5px; align-items:center; min-width:0; } .f .row > * { min-width:0; }
+.f .row input[type=text] { flex:1; }
+.f .row select { min-width:74px; flex:1 1 74px; }
+.f .row.wrap { flex-wrap:wrap; } .f .row.wrap > .row { flex:1 1 100%; }
+.hint { color:var(--dim); font-size:12px; margin:4px 0 8px; }
+.f .hint { grid-column:2; margin:0; }
+hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
+.pt { border:1px solid var(--line); border-radius:8px; padding:7px; margin:6px 0; background:var(--card); }
+.badge { display:inline-block; padding:2px 7px; border-radius:5px; background:#2b2140; color:#cfb4ff; font-size:11.5px; font-weight:700; margin-left:4px; white-space:nowrap; }
+#toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:#262b36; border:1px solid #3a4150; padding:9px 14px; border-radius:9px; display:none; z-index:90; max-width:80vw; }
+#toast.bad { border-color:#8a3a35; color:#ffb3ab; }
+.panelrow { display:flex; align-items:center; gap:6px; margin:6px 0; } .panelrow b { width:96px; font-weight:600; font-size:12.5px; flex:none; } .panelrow select { flex:1; }
+.pickbtn { display:flex; align-items:center; gap:8px; flex:1; min-width:0; background:var(--input); border:1px solid var(--line); border-radius:6px; padding:4px 8px; text-align:left; }
+.pickbtn:hover { border-color:#4a5262; }
+.pickbtn .th { width:34px; height:26px; flex:none; background:#222 center/contain no-repeat; border-radius:3px; }
+.pickbtn span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+#modal { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:60; display:none; align-items:center; justify-content:center; }
+#modal .card { width:min(900px,94vw); height:min(640px,88vh); background:var(--panel); border:1px solid #3a4150; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; }
+#modal .mh { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); }
+#modal .mh h3 { margin:0; font:700 16px var(--cond); letter-spacing:.8px; flex:1; }
+#modal .tabs { display:flex; gap:6px; padding:8px 14px 0; }
+#modal .tab { padding:6px 12px; border-radius:7px 7px 0 0; color:var(--muted); font-weight:600; background:var(--card); } #modal .tab.on { background:var(--card2); color:var(--text); }
+#modal .mb { flex:1; overflow:auto; padding:10px 14px 16px; background:var(--card2); }
+#modal .gh { font:700 11px var(--cond); letter-spacing:1.2px; color:var(--muted); text-transform:uppercase; margin:14px 0 6px; }
+#modal .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
+#modal .tile { background:#101319 repeating-conic-gradient(#171a21 0 25%,#12151b 0 50%) 0 0/16px 16px; border:1px solid var(--line); border-radius:8px; height:96px; position:relative; cursor:pointer; overflow:hidden; }
+#modal .tile:hover { border-color:var(--gold); } #modal .tile.cur { border-color:var(--green); }
+#modal .tile img { width:100%; height:100%; object-fit:contain; display:block; }
+#modal .tile span { position:absolute; left:0; right:0; bottom:0; background:rgba(0,0,0,.7); font-size:11px; padding:2px 5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#fontpop { position:fixed; z-index:70; width:300px; max-height:62vh; overflow:auto; background:#171a21; border:1px solid #444c5c; border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:none; }
+#fontpop input { width:calc(100% - 16px); margin:8px; }
+#fontpop .fg { font:700 10.5px var(--cond); letter-spacing:1.3px; color:var(--dim); text-transform:uppercase; padding:8px 12px 3px; }
+#fontpop .fi { padding:5px 12px; font-size:20px; line-height:1.2; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #fontpop .fi:hover { background:#262b36; } #fontpop .fi.cur { color:var(--gold); }
+#fontpop .fi small { font:11px system-ui; color:var(--dim); margin-left:8px; }
+@media (max-width: 1000px) { main { grid-template-columns:1fr; grid-template-rows:auto 60vh auto; overflow:auto; } body { overflow:auto; height:auto; } .split { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="mark"><b>RACE</b>VISION <span>OVERLAY EDITOR</span></div>
+  <select id="layoutSel" title="Layout being edited"></select>
+  <button class="hb" id="bNew">New</button>
+  <button class="hb" id="bSaveAs">Save as…</button>
+  <button class="hb warn" id="bDelete">Delete</button>
+  <button class="hb" id="bReset" title="Put the built-in layout back the way it came">Reset</button>
+  <span class="sp"></span>
+  <span id="status" style="color:var(--muted);font-size:13px"></span>
+  <button class="hb" id="bUndo" title="Ctrl+Z">Undo</button>
+  <button class="hb pri" id="bSave" title="Ctrl+S: saves the file and changes the overlay on screen right away">Save</button>
+  <a class="hb" id="bBack" href="/director">Director</a>
+</header>
+<main>
+  <aside id="left">
+    <details class="sec" open>
+      <summary>Elements <span class="r" id="elCount"></span></summary>
+      <div class="secbody">
+        <div class="addrow">
+          <select id="addType">
+            <option value="text">Text</option><option value="run">Multi-colour text</option><option value="rect">Box / plate</option>
+            <option value="image">Picture</option><option value="portrait">Driver portrait</option><option value="bar">Bar</option>
+            <option value="segbar">Segment bar</option><option value="arc">Arc gauge</option><option value="dial">Dial (picture ring)</option>
+            <option value="needle">Needle (picture)</option><option value="ordinal">Place (12TH)</option>
+          </select>
+          <button class="hb" id="bAdd">Add</button>
+        </div>
+        <div class="grpbar"><button class="hb sm" id="bGroup" title="Group the selected elements (Ctrl+G): they select and move together">Group</button><button class="hb sm" id="bUngroup" title="Ctrl+Shift+G">Ungroup</button><button class="hb sm" id="bLock" title="Lock / unlock the selection (Ctrl+L): locked elements can't be moved, resized or deleted">Lock</button><span class="hint" style="margin:0 0 0 4px">Shift-click to select several</span></div>
+        <input type="text" id="elFilter" placeholder="Find an element…">
+        <div id="elList"></div>
+        <div class="hint">Top of the list = drawn on top. Drag a row to change the layer order; the dot hides an element.</div>
+      </div>
+    </details>
+    <details class="sec" open>
+      <summary>Style <span class="r" id="styleNow"></span></summary>
+      <div class="secbody">
+        <div class="panelrow"><b>Style</b><select id="styleSel"></select></div>
+        <div class="grpbar"><button class="hb sm" id="bStyleSave" title="Save which layout each panel uses right now as a named style, and switch to it">Save current look as style…</button><button class="hb sm warn" id="bStyleDel">Delete style</button></div>
+        <div class="hint">A style is a whole look: which layout every panel uses. It is the Style box on RaceVision's Overlays page too, next to Dash and Classic. Choosing a style clears the per-panel picks below.</div>
+      </div>
+    </details>
+    <details class="sec" open>
+      <summary>Where layouts show</summary>
+      <div class="secbody">
+        <div id="panels"></div>
+        <div class="hint">Pick a layout for each overlay, or Automatic for RaceVision's own choice (the overlay style on the Overlays page). The Custom ones are yours: put a ticker or any layout there and set when it shows.</div>
+      </div>
+    </details>
+  </aside>
+  <div class="split" id="splitL" title="Drag to resize, double-click to hide / show"></div>
+  <section id="stageWrap">
+    <div class="tools">
+      <label>Zoom <select id="zoom"><option>0.5</option><option>0.75</option><option selected>1</option><option>1.5</option><option>2</option><option>3</option></select></label>
+      <label>Snap <select id="snap"><option value="1">1 px</option><option value="2">2 px</option><option value="5">5 px</option><option value="10">10 px</option><option value="20">20 px</option></select></label>
+      <label>Grid <select id="gridSel"><option value="0">off</option><option value="5">5</option><option value="10">10</option><option value="20">20</option><option value="50">50</option></select></label>
+      <label><input type="checkbox" id="guides" checked> Guides</label>
+      <label><input type="checkbox" id="measure" checked> Distances</label>
+      <label><input type="checkbox" id="outlines" checked> Boxes</label>
+      <label><input type="checkbox" id="checker"> Checker</label>
+      <label><input type="checkbox" id="live"> Live data</label>
+      <span class="coord" id="coord">&nbsp;</span>
+    </div>
+    <div id="stagePad"><div id="stage"><img id="prev" alt=""><div id="grid"></div><div id="boxes"></div><svg id="guideSvg" style="position:absolute;left:0;top:0;pointer-events:none;overflow:visible"></svg></div></div>
+    <div class="hint" style="padding:0 14px 14px">Drag to move; corners and edges resize; arrow keys nudge (Shift = 10). Pink lines show what lines up with the other elements and the overlay's edges and centre (hold Alt to move without snapping). Teal numbers are the distances from the selected element to the overlay's edges.</div>
+  </section>
+  <div class="split" id="splitR" title="Drag to resize, double-click to hide / show"></div>
+  <aside id="right">
+    <div id="meta"></div>
+    <div id="props"></div>
+  </aside>
+</main>
+<div id="toast"></div>
+<div id="fontpop"></div>
+<div id="modal"><div class="card"><div class="mh"><h3 id="mTitle">Pick a picture</h3><input type="text" id="mSearch" placeholder="Search…" style="width:200px"><button class="hb" id="mUpload">Upload…</button><button class="hb" id="mClose">Close</button></div><div class="tabs" id="mTabs"></div><div class="mb" id="mBody"></div></div></div>
+<style id="fontCss"></style>
+<datalist id="colorList">
+  <option value="@gold"><option value="@white"><option value="@grey"><option value="@red"><option value="@green"><option value="@bg"><option value="@dashbg"><option value="@dim">
+  <option value="@car"><option value="@other"><option value="@top"><option value="@bottom"><option value="@leader">
+  <option value="@dash"><option value="@dashfrom"><option value="@dashto">
+</datalist>
+<script>
+const qs = new URLSearchParams(location.search);
+let KEY = qs.get("k") || "";
+try { if (KEY) localStorage.setItem("rv_k", KEY); else KEY = localStorage.getItem("rv_k") || ""; } catch (e) {}
+document.getElementById("bBack").href = "/director" + (KEY ? "?k=" + encodeURIComponent(KEY) : "");
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = { get(k, d) { try { const v = localStorage.getItem("rvOv_" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem("rvOv_" + k, JSON.stringify(v)); } catch (e) {} } };
+const apiUrl = (path, args = {}) => "/api/overlay" + (path ? "/" + path : "") + "?" + new URLSearchParams(Object.assign({ k: KEY }, args));
+async function call(path, args = {}, body = null, raw = false) {
+  const r = await fetch(apiUrl(path, args), { method: body === null ? "GET" : "POST", body: body === null ? undefined : body, cache: "no-store" });
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
+  return raw ? r : r.json();
+}
+function toast(s, bad) { const t = $("toast"); t.textContent = s; t.className = bad ? "bad" : ""; t.style.display = "block"; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", bad ? 5000 : 2400); }
+
+let INFO = null, name = "", L = null, saved = "", sel = -1, undo = [], sels = new Set();
+// selection: `sel` is the element being edited; `sels` is everything selected with it (Shift-click, or a whole group)
+function curSet() {
+  if (sel < 0 || !L) return new Set();
+  return sels.has(sel) ? new Set([...sels].filter(j => j < L.elements.length)) : new Set([sel]);
+}
+function pickEl(i, add) {
+  const g = L.elements[i].group;
+  const members = g ? L.elements.map((x, j) => x.group === g ? j : -1).filter(j => j >= 0) : [i];
+  if (add) {
+    const cur = curSet();
+    if (cur.has(i)) { members.forEach(j => cur.delete(j)); sels = cur; sel = cur.size ? [...cur][cur.size - 1] : -1; }
+    else { members.forEach(j => cur.add(j)); sels = cur; sel = i; }
+  } else { sels = new Set(members); sel = i; }
+  drawList(); drawProps(); drawBoxes();
+}
+const TYPES = { text: "Text", run: "Multi-colour", rect: "Box", image: "Picture", portrait: "Portrait", bar: "Bar", segbar: "Segments", arc: "Arc", dial: "Dial", needle: "Needle", ordinal: "Place" };
+
+// ---------------------------------------------------------------- panel sizes: drag the dividers, double-click to hide
+function setupSplit(id, varName, side, min, max) {
+  const el = $(id);
+  const w = store.get("w_" + varName, null);
+  if (w != null) document.documentElement.style.setProperty(varName, w + "px");
+  el.onpointerdown = ev => {
+    ev.preventDefault(); el.classList.add("on");
+    const startX = ev.clientX, start = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(varName)) || (side === "l" ? 300 : 340);
+    const mv = m => { const d = m.clientX - startX, v = Math.max(min, Math.min(max, start + (side === "l" ? d : -d))); document.documentElement.style.setProperty(varName, v + "px"); store.set("w_" + varName, v); };
+    const up = () => { el.classList.remove("on"); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  el.ondblclick = () => { const cur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(varName)); const v = cur < 20 ? (side === "l" ? 300 : 340) : 0; document.documentElement.style.setProperty(varName, v + "px"); store.set("w_" + varName, v); };
+}
+setupSplit("splitL", "--lw", "l", 0, 560); setupSplit("splitR", "--rw", "r", 0, 640);
+document.querySelectorAll("details.sec").forEach((d, i) => { const k = "open" + i, v = store.get(k, null); if (v !== null) d.open = v; d.addEventListener("toggle", () => store.set(k, d.open)); });
+["zoom", "snap", "gridSel"].forEach(id => { const v = store.get(id, null); if (v != null) $(id).value = v; });
+["guides", "measure", "outlines", "checker"].forEach(id => { const v = store.get(id, null); if (v != null) $(id).checked = v; });
+
+// ---------------------------------------------------------------- loading
+function fontCss() {
+  let css = "";
+  (INFO.fonts || []).forEach((f, i) => { css += `@font-face{font-family:"rvf${i}";src:url("${apiUrl("fontfile", { name: f.file })}");}\n`; f._css = "rvf" + i; });
+  $("fontCss").textContent = css;
+}
+async function load(pick) {
+  INFO = await call("");
+  fontCss();
+  const names = INFO.layouts.map(l => l.name);
+  if (!load.first) { load.first = true; if (!pick && qs.get("layout")) pick = qs.get("layout"); }
+  if (pick && names.includes(pick)) name = pick; else if (!names.includes(name)) name = names.includes("tag_classic") ? "tag_classic" : names[0] || "";
+  $("layoutSel").innerHTML = INFO.layouts.map(l => `<option value="${esc(l.name)}">${esc(l.name)}${l.title && l.title !== l.name ? " - " + esc(l.title) : ""}${l.used ? "  [" + l.used + "]" : ""}</option>`).join("");
+  $("layoutSel").value = name;
+  $("live").disabled = !INFO.live;
+  renderPanels(); renderStyles();
+  if (name) await openLayout(name); else { L = { title: "New", panel: "custom", w: 400, h: 80, elements: [] }; afterEdit(true); }
+  if (INFO.broken && INFO.broken.length) toast("Skipped (not valid JSON): " + INFO.broken.join(", "), true);
+}
+async function openLayout(n) {
+  L = await call("layout", { name: n });
+  L.w = L.w || 300; L.h = L.h || 100; L.elements = L.elements || [];
+  name = n; sel = -1; undo = [];
+  saved = JSON.stringify(L);
+  $("layoutSel").value = n;
+  if (!openLayout.first) { openLayout.first = true; if (qs.get("sel") != null && L.elements[+qs.get("sel")]) sel = +qs.get("sel"); }
+  afterEdit(true);
+}
+$("layoutSel").onchange = async () => {
+  if (dirty() && !confirm("Leave this layout? Your changes to it are not saved.")) { $("layoutSel").value = name; return; }
+  await openLayout($("layoutSel").value);
+};
+const dirty = () => JSON.stringify(L) !== saved;
+
+// ---------------------------------------------------------------- the stage
+const zoom = () => parseFloat($("zoom").value) || 1;
+const snapPx = () => parseInt($("snap").value) || 1;
+let renderBusy = false, renderAgain = false;
+function scheduleRender(now) { clearTimeout(scheduleRender.h); scheduleRender.h = setTimeout(doRender, now ? 0 : 90); }
+async function doRender() {
+  if (renderBusy) { renderAgain = true; return; }
+  renderBusy = true;
+  try {
+    do {
+      renderAgain = false;
+      const r = await call("render", { s: zoom(), live: $("live").checked && INFO.live ? 1 : 0 }, JSON.stringify(L), true);
+      const url = URL.createObjectURL(await r.blob());
+      const img = $("prev"), old = img.src;
+      img.src = url;
+      if (old && old.startsWith("blob:")) setTimeout(() => URL.revokeObjectURL(old), 500);
+    } while (renderAgain);
+  } catch (e) { toast(e.message, true); }
+  renderBusy = false;
+}
+function rectOf(e) {
+  const t = e.type;
+  let w = +e.w || 0, h = +e.h || 0;
+  if (t === "text" || t === "run") { w = w || 200; h = Math.round((+e.size || 20) * 1.3); }
+  else if (t === "ordinal") { w = (+e.size || 34) * 2.6; h = (+e.size || 34) * 1.5; }
+  else { w = w || 50; h = h || 20; }
+  return { x: +e.x || 0, y: +e.y || 0, w, h };
+}
+function drawGrid() {
+  const g = $("grid"), s = parseInt($("gridSel").value) || 0, z = zoom();
+  if (!s) { g.style.display = "none"; return; }
+  g.style.display = "block";
+  const px = s * z, major = px * (s <= 10 ? 5 : 2);
+  g.style.backgroundImage = "linear-gradient(to right, rgba(255,255,255,.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.22) 1px, transparent 1px), linear-gradient(to right, rgba(255,255,255,.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.07) 1px, transparent 1px)";
+  g.style.backgroundSize = `${major}px ${major}px, ${major}px ${major}px, ${px}px ${px}px, ${px}px ${px}px`;
+}
+function drawBoxes() {
+  const z = zoom(), stage = $("stage");
+  stage.style.width = L.w * z + "px"; stage.style.height = L.h * z + "px";
+  $("prev").style.width = L.w * z + "px"; $("prev").style.height = L.h * z + "px";
+  $("boxes").style.display = $("outlines").checked ? "block" : "none";
+  drawGrid();
+  const b = $("boxes"), cs = curSet();
+  b.innerHTML = "";
+  L.elements.forEach((e, i) => {
+    const r = rectOf(e), d = document.createElement("div");
+    d.className = "box" + (cs.has(i) ? " sel" : "") + (e.hidden ? " off" : "") + (e.locked ? " locked" : "");
+    d.style.cssText = `left:${r.x * z}px;top:${r.y * z}px;width:${r.w * z}px;height:${r.h * z}px`;
+    d.title = e.name || TYPES[e.type];
+    d.dataset.i = i;
+    if (i === sel && !e.locked && cs.size <= 1) {
+      const sides = e.type === "text" || e.type === "run" ? ["e", "w"] : e.type === "ordinal" ? [] : ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+      sides.forEach(s => { const h = document.createElement("div"); h.className = "h " + s; h.dataset.h = s; d.appendChild(h); });
+    }
+    d.onpointerdown = ev => startDrag(ev, i, ev.target.dataset.h || "move");
+    b.appendChild(d);
+  });
+  drawGuides(null);
+}
+// guides: pink alignment lines while dragging, teal distances from the selected element to the overlay's edges
+function drawGuides(active) {
+  const svg = $("guideSvg"), z = zoom();
+  svg.setAttribute("width", L.w * z); svg.setAttribute("height", L.h * z);
+  let h = "";
+  const line = (x1, y1, x2, y2, c, dash) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="1" ${dash ? 'stroke-dasharray="4 3"' : ""} />`;
+  const label = (x, y, t, c) => `<g><rect x="${x - 2}" y="${y - 10}" width="${String(t).length * 6.6 + 6}" height="14" rx="3" fill="rgba(10,12,16,.85)"/><text x="${x + 1}" y="${y + 1}" fill="${c}" font-size="11" font-family="Consolas,monospace">${t}</text></g>`;
+  const e = L.elements[sel];
+  if (e && $("measure").checked && !e.hidden) {
+    const r = rectOf(e), cx = (r.x + r.w / 2) * z, cy = (r.y + r.h / 2) * z, T = "#3cc8c8";
+    if (r.x > 0) h += line(0, cy, r.x * z, cy, T, true) + label(Math.max(2, r.x * z / 2 - 10), cy - 3, Math.round(r.x), T);
+    const rr = L.w - r.x - r.w; if (rr > 0) h += line((r.x + r.w) * z, cy, L.w * z, cy, T, true) + label((r.x + r.w) * z + rr * z / 2 - 10, cy - 3, Math.round(rr), T);
+    if (r.y > 0) h += line(cx, 0, cx, r.y * z, T, true) + label(cx + 4, r.y * z / 2 + 4, Math.round(r.y), T);
+    const bb = L.h - r.y - r.h; if (bb > 0) h += line(cx, (r.y + r.h) * z, cx, L.h * z, T, true) + label(cx + 4, (r.y + r.h) * z + bb * z / 2 + 4, Math.round(bb), T);
+    h += label(r.x * z, r.y * z - 4 < 12 ? (r.y + r.h) * z + 16 : r.y * z - 4, `${Math.round(r.x)}, ${Math.round(r.y)}  ${Math.round(r.w)}×${Math.round(r.h)}`, "#ffc400");
+  }
+  if (active) {
+    active.v.forEach(x => { h += line(x * z, 0, x * z, L.h * z, "#ff2d95"); });
+    active.h.forEach(y => { h += line(0, y * z, L.w * z, y * z, "#ff2d95"); });
+  }
+  svg.innerHTML = h;
+}
+// the snap targets: the overlay's edges and middle, and every other visible element's edges and middle
+function targets(skip) {
+  const xs = [0, L.w / 2, L.w], ys = [0, L.h / 2, L.h];
+  L.elements.forEach((e, j) => { if ((skip instanceof Set ? skip.has(j) : j === skip) || e.hidden) return; const r = rectOf(e); xs.push(r.x, r.x + r.w / 2, r.x + r.w); ys.push(r.y, r.y + r.h / 2, r.y + r.h); });
+  return { xs, ys };
+}
+function nearest(vals, ts, thr) {
+  let best = null;
+  for (const v of vals) for (const t of ts) { const d = t - v; if (Math.abs(d) <= thr && (best === null || Math.abs(d) < Math.abs(best.d))) best = { d, at: t }; }
+  return best;
+}
+let dragging = null;
+function startDrag(ev, i, mode) {
+  ev.preventDefault(); ev.stopPropagation();
+  const add = ev.shiftKey || ev.ctrlKey || ev.metaKey;
+  if (add) pickEl(i, true);
+  else if (!curSet().has(i)) pickEl(i, false);
+  else if (sel !== i) { sel = i; sels = curSet(); drawList(); drawProps(); drawBoxes(); }
+  const e = L.elements[i];
+  if (e.locked || add) return;
+  const members = mode === "move" ? [...curSet()].filter(j => !L.elements[j].locked) : [i];
+  const starts = members.map(j => ({ e: L.elements[j], r: rectOf(L.elements[j]) }));
+  const r0 = rectOf(e), sx = ev.clientX, sy = ev.clientY, z = zoom(), sn = snapPx();
+  pushUndo();
+  const hasH = !(e.type === "text" || e.type === "run" || e.type === "ordinal");
+  const tg = targets(new Set(members));
+  const mv = m => {
+    const dx = (m.clientX - sx) / z, dy = (m.clientY - sy) / z;
+    const S = v => Math.round(v / sn) * sn;
+    let x = r0.x, y = r0.y, w = r0.w, h = r0.h;
+    if (mode === "move") { x = S(r0.x + dx); y = S(r0.y + dy); }
+    else {
+      if (mode.includes("e")) w = Math.max(1, S(r0.w + dx));
+      if (mode.includes("s")) h = Math.max(1, S(r0.h + dy));
+      if (mode.includes("w")) { const nx = S(r0.x + dx); w = Math.max(1, r0.x + r0.w - nx); x = r0.x + r0.w - w; }
+      if (mode.includes("n")) { const ny = S(r0.y + dy); h = Math.max(1, r0.y + r0.h - ny); y = r0.y + r0.h - h; }
+    }
+    const act = { v: [], h: [] };
+    if ($("guides").checked && !m.altKey) {
+      const thr = 6 / z;
+      if (mode === "move") {
+        const bx = nearest([x, x + w / 2, x + w], tg.xs, thr), by = nearest([y, y + h / 2, y + h], tg.ys, thr);
+        if (bx) { x += bx.d; act.v.push(bx.at); } if (by) { y += by.d; act.h.push(by.at); }
+      } else {
+        if (mode.includes("e")) { const b = nearest([x + w], tg.xs, thr); if (b) { w += b.d; act.v.push(b.at); } }
+        if (mode.includes("s")) { const b = nearest([y + h], tg.ys, thr); if (b) { h += b.d; act.h.push(b.at); } }
+        if (mode.includes("w")) { const b = nearest([x], tg.xs, thr); if (b) { x += b.d; w -= b.d; act.v.push(b.at); } }
+        if (mode.includes("n")) { const b = nearest([y], tg.ys, thr); if (b) { y += b.d; h -= b.d; act.h.push(b.at); } }
+      }
+    }
+    if (mode === "move") { const dxm = x - r0.x, dym = y - r0.y; starts.forEach(m => { m.e.x = Math.round((m.r.x + dxm) * 100) / 100; m.e.y = Math.round((m.r.y + dym) * 100) / 100; }); }
+    else { e.x = Math.round(x * 100) / 100; e.y = Math.round(y * 100) / 100; e.w = Math.round(w * 100) / 100; if (hasH) e.h = Math.round(h * 100) / 100; }
+    dragging = act;
+    drawBoxes(); drawGuides(act); syncPropNumbers(); scheduleRender();
+  };
+  const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); dragging = null; drawGuides(null); afterEdit(false); };
+  dragging = { v: [], h: [] };
+  window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+}
+$("stage").onpointerdown = ev => { if (ev.target === $("stage") || ev.target === $("prev") || ev.target === $("grid")) { sel = -1; sels = new Set(); drawBoxes(); drawProps(); drawList(); } };
+$("stage").onpointermove = ev => { const r = $("stage").getBoundingClientRect(), z = zoom(); $("coord").textContent = `x ${Math.round((ev.clientX - r.left) / z)}   y ${Math.round((ev.clientY - r.top) / z)}   of ${L.w}×${L.h}`; };
+$("stage").onpointerleave = () => { $("coord").innerHTML = "&nbsp;"; };
+["zoom", "snap", "gridSel"].forEach(id => $(id).onchange = () => { store.set(id, $(id).value); drawBoxes(); if (id === "zoom") scheduleRender(true); });
+["guides", "measure", "outlines"].forEach(id => $(id).onchange = () => { store.set(id, $(id).checked); drawBoxes(); });
+$("checker").onchange = () => { store.set("checker", $("checker").checked); $("stage").classList.toggle("checker", $("checker").checked); };
+$("stage").classList.toggle("checker", $("checker").checked);
+$("live").onchange = () => { scheduleRender(true); clearInterval(window.liveT); if ($("live").checked) window.liveT = setInterval(() => { if (!dragging) scheduleRender(true); }, 1000); };
+
+// ---------------------------------------------------------------- history
+function pushUndo() { undo.push(JSON.stringify(L)); if (undo.length > 80) undo.shift(); }
+function doUndo() { if (!undo.length) return; L = JSON.parse(undo.pop()); if (sel >= L.elements.length) sel = -1; afterEdit(true); }
+$("bUndo").onclick = doUndo;
+function afterEdit(full) {
+  if (full) { drawList(); drawProps(); drawMeta(); }
+  drawBoxes();
+  $("status").textContent = dirty() ? "Unsaved changes" : "Saved";
+  $("status").style.color = dirty() ? "var(--gold)" : "var(--muted)";
+  $("bUndo").disabled = !undo.length;
+  const li = INFO && INFO.layouts.find(l => l.name === name);
+  $("bDelete").disabled = !li || li.builtin; $("bReset").disabled = !li || !li.builtin;
+  scheduleRender(full);
+}
+
+// ---------------------------------------------------------------- the element list
+function subline(e) {
+  if (e.type === "text") return e.text || "";
+  if (e.type === "run") return (e.parts || []).map(p => p.story ? "[race story]" : p.text).join("").trim();
+  if (e.type === "image") return e.file ? e.file.replace(/^art:/, "") : e.art ? "driver " + e.art : "";
+  if (e.type === "portrait") return "headshot of " + (e.who || "car") + (e.tab === false ? "" : " + number banner");
+  if (["bar", "segbar", "arc", "dial", "needle", "ordinal"].includes(e.type)) return e.src || "";
+  return e.show ? "when " + e.show : "";
+}
+let dragRow = -1;
+function drawList() {
+  $("elCount").textContent = L.elements.length;
+  const lst = $("elList"), flt = ($("elFilter").value || "").toLowerCase(), cs = curSet();
+  lst.innerHTML = "";
+  for (let i = L.elements.length - 1; i >= 0; i--) {
+    const e = L.elements[i], sub = subline(e), nm = e.name || TYPES[e.type] || e.type;
+    if (flt && !(nm + " " + sub + " " + e.type).toLowerCase().includes(flt)) continue;
+    const d = document.createElement("div");
+    d.className = "el" + (cs.has(i) ? " sel" : "") + (e.hidden ? " off" : "") + (e.locked ? " locked" : "");
+    d.draggable = !e.locked;
+    d.innerHTML = `<span class="chip t-${e.type}">${esc(TYPES[e.type] || e.type)}</span><div class="nm"><b>${esc(nm)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div>${e.group ? `<span class="gtag" title="Group: ${esc(e.group)}">${esc(e.group)}</span>` : ""}<button class="lk${e.locked ? " on" : ""}" title="${e.locked ? "Locked: click to unlock" : "Lock in place"}">${e.locked ? "🔒" : "🔓"}</button><button class="eye" title="Show / hide">${e.hidden ? "○" : "●"}</button>`;
+    d.querySelector(".eye").onclick = ev => { ev.stopPropagation(); pushUndo(); if (e.hidden) delete e.hidden; else e.hidden = true; afterEdit(true); };
+    d.querySelector(".lk").onclick = ev => { ev.stopPropagation(); pushUndo(); if (e.locked) delete e.locked; else e.locked = true; afterEdit(true); };
+    d.onclick = ev => pickEl(i, ev.shiftKey || ev.ctrlKey || ev.metaKey);
+    d.ondragstart = ev => { dragRow = i; ev.dataTransfer.effectAllowed = "move"; };
+    d.ondragover = ev => { ev.preventDefault(); d.classList.add("dropat"); };
+    d.ondragleave = () => d.classList.remove("dropat");
+    d.ondrop = ev => {
+      ev.preventDefault(); d.classList.remove("dropat");
+      if (dragRow < 0 || dragRow === i) return;
+      pushUndo();
+      const [m] = L.elements.splice(dragRow, 1);
+      const to = dragRow < i ? i : i + 1;                // dropped on a row: just above it in the list (= on top of it)
+      L.elements.splice(Math.min(to, L.elements.length), 0, m);
+      sel = L.elements.indexOf(m); dragRow = -1; afterEdit(true);
+    };
+    lst.appendChild(d);
+  }
+}
+$("elFilter").oninput = drawList;
+$("bGroup").onclick = groupSel; $("bUngroup").onclick = ungroupSel; $("bLock").onclick = toggleLock;
+function groupSel() {
+  const l = [...curSet()];
+  if (l.length < 2) { toast("Select two or more elements first (Shift-click)."); return; }
+  const used = new Set(L.elements.map(x => x.group).filter(Boolean));
+  const n = (prompt("Group name:", "Group " + (used.size + 1)) || "").trim();
+  if (!n) return;
+  pushUndo(); l.forEach(j => { L.elements[j].group = n; }); afterEdit(true);
+}
+function ungroupSel() {
+  const gs = new Set([...curSet()].map(j => L.elements[j].group).filter(Boolean));
+  if (!gs.size) return;
+  pushUndo(); L.elements.forEach(x => { if (gs.has(x.group)) delete x.group; }); afterEdit(true);
+}
+function toggleLock() {
+  const l = [...curSet()]; if (!l.length) return;
+  pushUndo();
+  const lockAll = l.some(j => !L.elements[j].locked);
+  l.forEach(j => { if (lockAll) L.elements[j].locked = true; else delete L.elements[j].locked; });
+  afterEdit(true);
+}
+function moveLayer(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= L.elements.length) return;
+  pushUndo();
+  [L.elements[i], L.elements[j]] = [L.elements[j], L.elements[i]];
+  sel = j; afterEdit(true);
+}
+const DEFAULTS = {
+  text: { type: "text", name: "Text", x: 10, y: 10, w: 220, size: 24, color: "#ffffff", text: "{car.full}", upper: true },
+  run: { type: "run", name: "Multi-colour text", x: 10, y: 10, w: 320, size: 18, parts: [{ text: "LAST LAP   ", color: "@gold" }, { text: "{car.last_lap}", color: "@white" }] },
+  rect: { type: "rect", name: "Box", x: 10, y: 10, w: 200, h: 40, radius: 6, fill: "#14161ce6" },
+  image: { type: "image", name: "Picture", x: 10, y: 10, w: 100, h: 100, file: "" },
+  portrait: { type: "portrait", name: "Portrait", x: 10, y: 10, w: 82, h: 88, tab: false, who: "car" },
+  bar: { type: "bar", name: "Bar", x: 10, y: 10, w: 200, h: 10, src: "car.throttle", color: "@green", track: "#323640" },
+  segbar: { type: "segbar", name: "Segments", x: 10, y: 10, w: 108, h: 26, src: "car.rpm_frac", segs: 12, gap: 3, color: "#ff8c1e", hot: 2, hotColor: "#eb3c28", track: "#343840" },
+  arc: { type: "arc", name: "Arc", x: 10, y: 10, w: 76, h: 76, src: "car.throttle", from: 150, sweep: 240, thick: 12, segs: 24, color: "#5ac828", color2: "#ffe628", track: "#343840" },
+  dial: { type: "dial", name: "Dial", x: 10, y: 10, w: 120, h: 120, src: "car.rpm_10k", from: -225, sweep: 270, fillFile: "", trackFile: "" },
+  needle: { type: "needle", name: "Needle", x: 10, y: 10, w: 100, h: 12, src: "car.rpm_10k", file: "", from: -225, sweep: 270, pivotX: 0.5, pivotY: 0.5 },
+  ordinal: { type: "ordinal", name: "Place", x: 10, y: 10, size: 34, font: "dash", src: "car.place", under: "PLACE", color: "@white" }
+};
+$("bAdd").onclick = () => {
+  pushUndo();
+  const e = JSON.parse(JSON.stringify(DEFAULTS[$("addType").value]));
+  L.elements.push(e); sel = L.elements.length - 1; afterEdit(true);
+};
+
+// ---------------------------------------------------------------- property controls
+function field(label, node, hint) {
+  const f = document.createElement("div"); f.className = "f";
+  const l = document.createElement("label"); l.textContent = label; f.appendChild(l);
+  const r = document.createElement("div"); r.className = "row"; r.appendChild(node); f.appendChild(r);
+  if (hint) { const h = document.createElement("div"); h.className = "hint"; h.textContent = hint; f.appendChild(h); }
+  return f;
+}
+function mkNum(obj, key, opts = {}) {
+  const i = document.createElement("input"); i.type = "number"; i.step = opts.step || 1;
+  i.value = obj[key] == null ? (opts.def == null ? "" : opts.def) : obj[key];
+  i.onfocus = () => { i._u = JSON.stringify(L); };
+  i.oninput = () => { if (i.value === "") delete obj[key]; else obj[key] = parseFloat(i.value); drawBoxes(); scheduleRender(); $("status").textContent = "Unsaved changes"; };
+  i.onchange = () => { if (i._u) { undo.push(i._u); i._u = null; } afterEdit(opts.redraw); };
+  return i;
+}
+function mkText(obj, key, opts = {}) {
+  const i = document.createElement("input"); i.type = "text"; i.value = obj[key] == null ? "" : obj[key];
+  if (opts.list) i.setAttribute("list", opts.list);
+  if (opts.ph) i.placeholder = opts.ph;
+  i.onfocus = () => { i._u = JSON.stringify(L); };
+  i.oninput = () => { if (i.value === "") delete obj[key]; else obj[key] = i.value; drawBoxes(); scheduleRender(); };
+  i.onchange = () => { if (i._u) { undo.push(i._u); i._u = null; } afterEdit(opts.redraw !== false); };
+  return i;
+}
+function mkSelect(obj, key, options, def) {
+  const s = document.createElement("select");
+  options.forEach(o => { const [v, t] = Array.isArray(o) ? o : [o, o]; const op = document.createElement("option"); op.value = v; op.textContent = t; s.appendChild(op); });
+  s.value = obj[key] == null ? def : obj[key];
+  s.onchange = () => { pushUndo(); if (s.value === def) delete obj[key]; else obj[key] = s.value; afterEdit(true); };
+  return s;
+}
+function mkCheck(obj, key, def) {
+  const c = document.createElement("input"); c.type = "checkbox"; c.checked = obj[key] == null ? !!def : !!obj[key];
+  c.onchange = () => { pushUndo(); if (c.checked === !!def) delete obj[key]; else obj[key] = c.checked; afterEdit(true); };
+  return c;
+}
+function mkColor(obj, key, opts = {}) {
+  const w = document.createElement("div"); w.className = "row"; w.style.flex = "1";
+  const t = mkText(obj, key, { list: "colorList", ph: opts.ph || "#rrggbb or @token", redraw: false });
+  const p = document.createElement("input"); p.type = "color";
+  const hex = v => /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v || "") ? "#" + v.slice(1, 7) : "#ffffff";
+  p.value = hex(obj[key]);
+  p.oninput = () => { const a = /^#[0-9a-fA-F]{8}$/.test(obj[key] || "") ? obj[key].slice(7) : ""; obj[key] = p.value + a; t.value = obj[key]; drawBoxes(); scheduleRender(); };
+  p.onfocus = () => { p._u = JSON.stringify(L); };
+  p.onchange = () => { if (p._u) { undo.push(p._u); p._u = null; } afterEdit(false); };
+  t.addEventListener("change", () => { p.value = hex(obj[key]); });
+  w.appendChild(t); w.appendChild(p);
+  return w;
+}
+function srcParts(v) {
+  const i = (v || "").indexOf(".");
+  if (i < 0) return { who: "car", field: "" };
+  const a = v.slice(0, i);
+  return INFO.sources.whos.includes(a) || /^p\d+$/.test(a) ? { who: a, field: v.slice(i + 1) } : { who: "(global)", field: v };
+}
+function mkSrc(obj, key, kinds, quiet) {
+  const w = document.createElement("div"); w.className = "row"; w.style.flex = "1";
+  const cur = srcParts(obj[key]);
+  const who = document.createElement("select"), fld = document.createElement("select");
+  ["(global)"].concat(INFO.sources.whos).forEach(x => { const o = document.createElement("option"); o.value = x; o.textContent = x === "(global)" ? "race / shot" : x; who.appendChild(o); });
+  who.value = cur.who;
+  function fill() {
+    const list = who.value === "(global)" ? INFO.sources.global : INFO.sources.car;
+    fld.innerHTML = "";
+    list.filter(f => !kinds || kinds.includes(f.kind)).forEach(f => { const o = document.createElement("option"); o.value = f.key; o.textContent = f.label; fld.appendChild(o); });
+  }
+  fill(); fld.value = cur.field;
+  if (!fld.value && fld.options.length) fld.value = fld.options[0].value;
+  const set = () => { if (quiet) return; pushUndo(); obj[key] = (who.value === "(global)" ? "" : who.value + ".") + fld.value; afterEdit(false); };
+  who.onchange = () => { fill(); set(); }; fld.onchange = set;
+  w.appendChild(who); w.appendChild(fld);
+  return w;
+}
+const mkWho = (obj, key, def) => mkSelect(obj, key, INFO.sources.whos, def || "car");
+function tokenInserter(target, obj, key) {
+  const w = document.createElement("div"); w.className = "row wrap"; w.style.flex = "1";
+  const tmp = {};
+  const pick = mkSrc(tmp, "s", null, true);
+  const dec = document.createElement("select");
+  [["", "as is"], ["0", "0 decimals"], ["1", "1 decimal"], ["2", "2 decimals"], ["3", "3 decimals"]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; dec.appendChild(o); });
+  const go = document.createElement("button"); go.className = "hb sm"; go.textContent = "Insert";
+  go.onclick = () => {
+    const sl = pick.querySelectorAll("select"), who = sl[0].value, f = sl[1].value;
+    if (!f) return;
+    const tok = "{" + (who === "(global)" ? "" : who + ".") + f + (dec.value ? ":" + dec.value : "") + "}";
+    const a = target.selectionStart == null ? target.value.length : target.selectionStart, b = target.selectionEnd == null ? a : target.selectionEnd;
+    pushUndo();
+    target.value = target.value.slice(0, a) + tok + target.value.slice(b);
+    obj[key] = target.value; afterEdit(false);
+    target.focus(); target.selectionStart = target.selectionEnd = a + tok.length;
+  };
+  w.appendChild(pick); w.appendChild(dec); w.appendChild(go);
+  return w;
+}
+function mkArea(obj, key) {
+  const t = document.createElement("textarea"); t.value = obj[key] == null ? "" : obj[key];
+  t.onfocus = () => { t._u = JSON.stringify(L); };
+  t.oninput = () => { obj[key] = t.value; drawBoxes(); scheduleRender(); };
+  t.onchange = () => { if (t._u) { undo.push(t._u); t._u = null; } afterEdit(false); };
+  return t;
+}
+function syncPropNumbers() { document.querySelectorAll("#props input[data-k]").forEach(i => { const e = L.elements[sel]; if (e && e[i.dataset.k] != null) i.value = e[i.dataset.k]; }); }
+function num(e, k, step, def) { const i = mkNum(e, k, { step, def }); i.dataset.k = k; return i; }
+
+// ---------------------------------------------------------------- pictures: yours (layouts\images) and the art folder
+const picUrl = src => apiUrl("image", { src });
+let PICS = null;
+async function loadPics() { PICS = await call("pictures"); }
+function mkPicture(obj, key) {
+  const b = document.createElement("button"); b.className = "pickbtn";
+  const th = document.createElement("div"); th.className = "th";
+  if (obj[key]) th.style.backgroundImage = `url("${picUrl(obj[key])}")`;
+  const sp = document.createElement("span"); sp.textContent = obj[key] ? obj[key].replace(/^art:/, "") : "(none) - choose a picture";
+  b.append(th, sp);
+  b.onclick = () => openPicker(obj[key], v => { pushUndo(); if (v) obj[key] = v; else delete obj[key]; afterEdit(true); });
+  return b;
+}
+let pickCb = null, pickTab = "mine", pickCur = "";
+async function openPicker(cur, cb) {
+  pickCb = cb; pickCur = cur || "";
+  try { await loadPics(); } catch (e) { toast(e.message, true); return; }
+  pickTab = pickCur.startsWith("art:") ? "art" : "mine";
+  $("modal").style.display = "flex"; $("mSearch").value = "";
+  drawPicker();
+}
+function drawPicker() {
+  const q = $("mSearch").value.toLowerCase();
+  $("mTabs").innerHTML = "";
+  [["mine", `My pictures (${PICS.mine.length})`], ["art", `Art folder${PICS.series ? " - " + PICS.series : ""} (${PICS.art.length})`]].forEach(([k, t]) => {
+    const b = document.createElement("button"); b.className = "tab" + (pickTab === k ? " on" : ""); b.textContent = t; b.onclick = () => { pickTab = k; drawPicker(); }; $("mTabs").appendChild(b);
+  });
+  $("mUpload").style.display = pickTab === "mine" ? "" : "none";
+  const body = $("mBody"); body.innerHTML = "";
+  const tile = (path, label) => {
+    const t = document.createElement("div"); t.className = "tile" + (path === pickCur ? " cur" : "");
+    t.innerHTML = `<img loading="lazy" src="${picUrl(path)}"><span>${esc(label)}</span>`;
+    t.onclick = () => { closePicker(); pickCb && pickCb(path); };
+    return t;
+  };
+  const none = document.createElement("button"); none.className = "hb sm"; none.textContent = "No picture"; none.onclick = () => { closePicker(); pickCb && pickCb(""); };
+  body.appendChild(none);
+  if (pickTab === "mine") {
+    const items = PICS.mine.filter(n => n.toLowerCase().includes(q));
+    if (!items.length) body.insertAdjacentHTML("beforeend", `<div class="hint" style="margin-top:14px">${PICS.mine.length ? "Nothing matches." : "Nothing here yet. Upload a PNG from GIMP (or any editor), or copy files into the layouts\\images folder."}</div>`);
+    const g = document.createElement("div"); g.className = "grid"; g.style.marginTop = "10px";
+    items.forEach(n => g.appendChild(tile(n, n))); body.appendChild(g);
+  } else {
+    if (!PICS.art.length) body.insertAdjacentHTML("beforeend", `<div class="hint" style="margin-top:14px">No pictures found in the art folder. Set it on the Art page of RaceVision's window.</div>`);
+    const groups = {};
+    PICS.art.filter(a => (a.path + a.group).toLowerCase().includes(q)).forEach(a => (groups[a.group] = groups[a.group] || []).push(a));
+    Object.keys(groups).sort().forEach(gk => {
+      body.insertAdjacentHTML("beforeend", `<div class="gh">${esc(gk)}</div>`);
+      const g = document.createElement("div"); g.className = "grid";
+      groups[gk].forEach(a => g.appendChild(tile(a.path, a.path.split("/").pop()))); body.appendChild(g);
+    });
+  }
+}
+function closePicker() { $("modal").style.display = "none"; }
+$("mClose").onclick = closePicker; $("mSearch").oninput = drawPicker;
+$("modal").onclick = ev => { if (ev.target === $("modal")) closePicker(); };
+$("mUpload").onclick = () => uploadFile(async nm => { await loadPics(); pickTab = "mine"; pickCur = nm; drawPicker(); });
+function uploadFile(done) {
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/png,image/jpeg"; inp.multiple = true;
+  inp.onchange = async () => {
+    let last = "";
+    for (const f of inp.files) {
+      try { const nm = f.name.replace(/[^A-Za-z0-9_.\- ]/g, "_"); await call("upload", { name: nm }, await f.arrayBuffer()); last = nm; toast("Uploaded " + nm); }
+      catch (e) { toast(e.message, true); }
+    }
+    if (last) await done(last);
+  };
+  inp.click();
+}
+
+// ---------------------------------------------------------------- fonts: a list with every font shown in its own face
+function fontEntries() {
+  const uniq = a => { const seen = new Set(); return a.filter(f => !seen.has(f.family) && seen.add(f.family)); };
+  return { mine: uniq(INFO.fonts.filter(f => f.mine)), art: uniq(INFO.fonts.filter(f => !f.mine)), sys: INFO.sysfonts };
+}
+function fontCssFor(f) {
+  if (f === "ui" || !f) return '"Segoe UI",system-ui';
+  if (f === "dash") return '"Bahnschrift SemiBold Condensed","Arial Narrow"';
+  const m = INFO.fonts.find(x => x.family === f);
+  return m ? `"${m._css}"` : `"${f.replace(/"/g, "")}"`;
+}
+function mkFont(obj, key, def) {
+  const b = document.createElement("button"); b.className = "pickbtn";
+  const cur = obj[key] || def || "ui";
+  b.innerHTML = `<span style="font-family:${fontCssFor(cur)};font-size:17px">${esc(cur === "ui" ? "Segoe UI (default)" : cur === "dash" ? "Dash font (condensed)" : cur)}</span><span style="flex:none;color:var(--dim);font-size:11px">▾</span>`;
+  b.onclick = ev => { ev.stopPropagation(); openFontPop(b, cur, v => { pushUndo(); if (v === (def || "ui")) delete obj[key]; else obj[key] = v; afterEdit(true); }); };
+  return b;
+}
+function openFontPop(anchor, cur, cb) {
+  const pop = $("fontpop"), r = anchor.getBoundingClientRect(), fe = fontEntries();
+  pop.style.display = "block";
+  pop.style.left = Math.max(8, Math.min(innerWidth - 310, r.left)) + "px";
+  pop.style.top = Math.min(innerHeight * 0.38, r.bottom + 4) + "px";
+  const draw = () => {
+    const q = pop.querySelector("input") ? pop.querySelector("input").value.toLowerCase() : "";
+    const sect = (title, list) => {
+      const items = list.filter(f => f.name.toLowerCase().includes(q));
+      return items.length ? `<div class="fg">${title}</div>` + items.map(f => `<div class="fi${f.value === cur ? " cur" : ""}" data-f="${esc(f.value)}" style="font-family:${f.css}">${esc(f.name)}${f.note ? `<small>${esc(f.note)}</small>` : ""}</div>`).join("") : "";
+    };
+    const html = sect("Built in", [{ name: "Segoe UI", value: "ui", css: '"Segoe UI"', note: "default" }, { name: "Dash font", value: "dash", css: fontCssFor("dash"), note: "condensed, italic look" }])
+      + sect("RaceVision font pack and yours (layouts\\fonts)", fe.mine.map(f => ({ name: f.family, value: f.family, css: `"${f._css}"` })))
+      + sect("Art folder fonts", fe.art.map(f => ({ name: f.family, value: f.family, css: `"${f._css}"` })))
+      + sect("Installed in Windows", fe.sys.map(f => ({ name: f, value: f, css: `"${f}"` })));
+    pop.innerHTML = `<input type="text" placeholder="Search fonts…" value="${esc(q)}">` + html;
+    const inp = pop.querySelector("input"); inp.oninput = draw; inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+    pop.querySelectorAll(".fi").forEach(el => el.onclick = () => { pop.style.display = "none"; cb(el.dataset.f); });
+  };
+  draw();
+}
+document.addEventListener("pointerdown", ev => { const p = $("fontpop"); if (p.style.display === "block" && !p.contains(ev.target)) p.style.display = "none"; });
+
+// ---------------------------------------------------------------- properties
+function drawProps() {
+  const P = $("props");
+  P.innerHTML = "";
+  if (sel < 0 || !L.elements[sel]) { P.innerHTML = `<div class="hint" style="margin-top:14px">Click an element on the picture or in the list to edit it. Everything in an overlay is an element: add boxes, text, pictures and gauges, then bind each one to the data you want.</div>`; return; }
+  const e = L.elements[sel], t = e.type;
+  const hd = document.createElement("div"); hd.className = "lbl";
+  const many = curSet().size;
+  hd.innerHTML = `<span class="chip t-${t}" style="width:auto;padding:5px 9px">${esc(TYPES[t] || t)}</span><span class="badge">${many > 1 ? many + " selected" : (sel + 1) + " of " + L.elements.length}</span>`;
+  P.classList.toggle("locked", !!e.locked);
+  const mk = (txt, cls, fn) => { const b = document.createElement("button"); b.className = "hb sm " + cls; b.textContent = txt; b.onclick = fn; return b; };
+  const grp = document.createElement("span"); grp.style.cssText = "margin-left:auto;display:flex;gap:4px";
+  const up = mk("▲", "", () => moveLayer(sel, 1)), dn = mk("▼", "", () => moveLayer(sel, -1));
+  up.title = "Up a layer (drawn later = on top)"; dn.title = "Down a layer";
+  grp.append(up, dn,
+    mk("Duplicate", "", () => { pushUndo(); const c = JSON.parse(JSON.stringify(e)); c.name = (e.name || t) + " copy"; c.x = (+c.x || 0) + 10; c.y = (+c.y || 0) + 10; L.elements.push(c); sel = L.elements.length - 1; afterEdit(true); }),
+    mk("Delete", "warn", () => { pushUndo(); L.elements.splice(sel, 1); sel = -1; afterEdit(true); }));
+  hd.appendChild(grp);
+  P.appendChild(hd);
+  if (e.locked) { const lb = document.createElement("div"); lb.className = "lockbanner"; lb.textContent = "Locked in place. Untick Locked at the bottom (or click the lock in the list) to edit."; P.appendChild(lb); }
+  P.appendChild(field("Name", mkText(e, "name")));
+  P.appendChild(field("Group", mkText(e, "group", { ph: "(none)" }), "Elements with the same group name are selected and moved together."));
+  const pos = document.createElement("div"); pos.className = "row";
+  pos.append("x", num(e, "x"), "y", num(e, "y"));
+  P.appendChild(field("Position", pos));
+  if (t !== "ordinal") {
+    const sz = document.createElement("div"); sz.className = "row";
+    sz.append("w", num(e, "w"));
+    if (!(t === "text" || t === "run")) sz.append("h", num(e, "h"));
+    P.appendChild(field("Size", sz));
+  }
+  const al = document.createElement("div"); al.className = "row";
+  [["⇤", "Left edge", () => { e.x = 0; }], ["↔", "Centre across", () => { const r = rectOf(e); e.x = Math.round((L.w - r.w) / 2); }], ["⇥", "Right edge", () => { const r = rectOf(e); e.x = L.w - r.w; }],
+   ["⤒", "Top edge", () => { e.y = 0; }], ["↕", "Centre down", () => { const r = rectOf(e); e.y = Math.round((L.h - r.h) / 2); }], ["⤓", "Bottom edge", () => { const r = rectOf(e); e.y = L.h - r.h; }]]
+    .forEach(([ic, tip, fn]) => { const b = mk(ic, "", () => { pushUndo(); fn(); afterEdit(true); }); b.title = tip + " of the overlay"; b.style.minWidth = "30px"; al.appendChild(b); });
+  P.appendChild(field("Align", al));
+  const fontRow = () => P.appendChild(field("Font", mkFont(e, "font", "ui")));
+  const type = () => {
+    const r = document.createElement("div"); r.className = "row";
+    r.append("size", num(e, "size", 1, 20));
+    P.appendChild(field("Text size", r));
+    const f2 = document.createElement("div"); f2.className = "row";
+    f2.append(mkCheck(e, "bold", true), "bold", mkCheck(e, "italic", e.font === "dash"), "italic", mkCheck(e, "upper", false), "CAPS");
+    P.appendChild(field("Style", f2));
+  };
+  const range = () => { const r = document.createElement("div"); r.className = "row"; r.append("min", num(e, "min", 0.01, 0), "max", num(e, "max", 0.01, 1)); P.appendChild(field("Range", r, "The value's lowest and highest: empty at min, full at max.")); };
+  if (t === "text") {
+    P.appendChild(field("Text", mkArea(e, "text")));
+    P.appendChild(field("Insert data", tokenInserter(P.querySelector("textarea"), e, "text")));
+    fontRow(); type();
+    P.appendChild(field("Align", mkSelect(e, "align", ["left", "center", "right"], "left")));
+    P.appendChild(field("Colour", mkColor(e, "color")));
+  } else if (t === "run") {
+    const parts = e.parts = e.parts || [];
+    parts.forEach((p, k) => {
+      const box = document.createElement("div"); box.className = "pt";
+      if (p.story) box.innerHTML = `<div class="hint" style="margin:0 0 4px">Race story: the facts about the car's race, in their own colours (rotates every few seconds)</div>`;
+      else {
+        box.appendChild(field("Text", mkText(p, "text")));
+        box.appendChild(field("Insert data", tokenInserter(box.querySelector("input"), p, "text")));
+        box.appendChild(field("Colour", mkColor(p, "color")));
+      }
+      box.appendChild(mk("Remove part", "warn", () => { pushUndo(); parts.splice(k, 1); afterEdit(true); })); P.appendChild(box);
+    });
+    const add = document.createElement("div"); add.className = "row"; add.style.gap = "6px";
+    add.append(mk("+ Text part", "", () => { pushUndo(); parts.push({ text: "TEXT  ", color: "@white" }); afterEdit(true); }), mk("+ Race story", "", () => { pushUndo(); parts.push({ story: true }); afterEdit(true); }));
+    P.appendChild(add); P.appendChild(document.createElement("hr"));
+    fontRow(); type();
+  } else if (t === "rect") {
+    P.appendChild(field("Fill", mkColor(e, "fill")));
+    P.appendChild(field("Fill 2", mkColor(e, "fill2", { ph: "(none) second colour = gradient" })));
+    const r = document.createElement("div"); r.className = "row"; r.append("radius", num(e, "radius"), "slant", num(e, "slant"));
+    P.appendChild(field("Shape", r));
+    P.appendChild(field("Border", mkColor(e, "stroke", { ph: "(none)" })));
+    P.appendChild(field("Border px", num(e, "strokeW")));
+  } else if (t === "image") {
+    P.appendChild(field("Picture", mkPicture(e, "file"), "From your uploads or the art folder (PNG / JPG; layouts\\images is the folder for your own)."));
+    P.appendChild(field("Or driver art", mkSelect(e, "art", [["", "(none)"], ["number", "Number card"], ["headshot", "Headshot"]], "")));
+    P.appendChild(field("Driver", mkWho(e, "who")));
+    P.appendChild(field("Fit", mkSelect(e, "fit", [["stretch", "Stretch to the box"], ["contain", "Keep its shape"]], "stretch")));
+    P.appendChild(field("Align right", mkCheck(e, "alignRight", false)));
+  } else if (t === "portrait") {
+    P.appendChild(field("Driver", mkWho(e, "who")));
+    P.appendChild(field("Number banner", mkCheck(e, "tab", true), "The number card on a plate across the photo's bottom. Off = the photo alone (add a Picture element set to Number card to place the number yourself)."));
+    if (e.tab !== false) {
+      P.appendChild(field("Banner width", num(e, "offset", 1, 8)));
+      P.appendChild(field("Banner colour", mkColor(e, "fill")));
+      P.appendChild(field("Number font", mkFont(e, "font", "ui"), "Used when the car has no number-card art"));
+    }
+    P.appendChild(field("Zoom", num(e, "zoom", 0.05, 1.35), "1 = the whole picture, higher = in on the head"));
+    P.appendChild(field("Crop from top", num(e, "top", 0.01, 0.03), "How far down the picture the crop starts (0 - 0.3)"));
+    P.appendChild(field("Behind", mkColor(e, "back", { ph: "(none) colour behind the photo" })));
+  } else if (t === "bar" || t === "segbar" || t === "arc" || t === "dial" || t === "needle") {
+    P.appendChild(field("Value", mkSrc(e, "src", ["num"])));
+    range();
+    if (t === "bar" || t === "dial") {
+      P.appendChild(field("Fill picture", mkPicture(e, "fillFile"), "Shown only as far as the value (draw it full)"));
+      P.appendChild(field("Empty picture", mkPicture(e, "trackFile"), "Drawn whole underneath"));
+    }
+    if (t === "needle") P.appendChild(field("Needle picture", mkPicture(e, "file"), "Drawn pointing right (to 3 o'clock) at 0°; it turns about the pivot"));
+    if (t === "bar") {
+      if (e.fillFile || e.trackFile) P.appendChild(field("Fills toward", mkSelect(e, "dir", [["right", "→ right"], ["left", "← left"], ["up", "↑ up"], ["down", "↓ down"]], "right")));
+      else { P.appendChild(field("Colour", mkColor(e, "color"))); P.appendChild(field("Empty", mkColor(e, "track"))); P.appendChild(field("Vertical", mkCheck(e, "vertical", false))); }
+    }
+    if (t === "segbar" || t === "arc") {
+      P.appendChild(field("Colour", mkColor(e, "color")));
+      P.appendChild(field("Colour 2", mkColor(e, "color2", { ph: "end colour of the gradient" })));
+      P.appendChild(field("Empty", mkColor(e, "track")));
+    }
+    if (t === "segbar") {
+      const r = document.createElement("div"); r.className = "row"; r.append("segs", num(e, "segs", 1, 12), "gap", num(e, "gap", 0.1, 1));
+      P.appendChild(field("Segments", r));
+      const h = document.createElement("div"); h.className = "row"; h.append("last", num(e, "hot", 1, 0));
+      P.appendChild(field("Hot ones", h)); P.appendChild(field("Hot colour", mkColor(e, "hotColor")));
+      P.appendChild(field("Vertical", mkCheck(e, "vertical", false)));
+    }
+    if (t === "arc" || t === "dial" || t === "needle") {
+      const r = document.createElement("div"); r.className = "row"; r.append("from°", num(e, "from", 1, t === "arc" ? 150 : t === "dial" ? -90 : -120), "sweep°", num(e, "sweep", 1, t === "arc" ? 240 : t === "dial" ? 360 : 240));
+      P.appendChild(field("Angles", r, "0° = 3 o'clock, turning clockwise; -90° = 12 o'clock"));
+    }
+    if (t === "arc") { const q = document.createElement("div"); q.className = "row"; q.append("thick", num(e, "thick", 1, 12), "segs", num(e, "segs", 1, 24)); P.appendChild(field("Strokes", q)); }
+    if (t === "dial" || t === "needle") { const q = document.createElement("div"); q.className = "row"; q.append("x", num(e, "pivotX", 0.01, 0.5), "y", num(e, "pivotY", 0.01, 0.5)); P.appendChild(field("Pivot", q, "Where it turns, as a share of the box (0.5, 0.5 = middle)")); }
+  } else if (t === "ordinal") {
+    P.appendChild(field("Value", mkSrc(e, "src", ["num"])));
+    P.appendChild(field("Small text", mkText(e, "under")));
+    P.appendChild(field("Text size", num(e, "size", 1, 34)));
+    P.appendChild(field("Font", mkFont(e, "font", "dash")));
+    P.appendChild(field("Colour", mkColor(e, "color")));
+  }
+  P.appendChild(document.createElement("hr"));
+  P.appendChild(field("Show when", mkText(e, "show", { ph: "e.g. story.any   or   !replay" }), "All words must be true. ! = not. Any yes/no source: story.any, shot.sub, car.pit, top.has_card, race.green ..."));
+  if (L.panel === "battle") P.appendChild(field("Battle row", mkSelect(e, "row", [["", "(fixed)"], ["top", "top car (slides)"], ["bottom", "bottom car (slides)"]], "")));
+  const op = document.createElement("input"); op.type = "range"; op.min = 0; op.max = 1; op.step = 0.05; op.value = e.opacity == null ? 1 : e.opacity;
+  op.onfocus = () => { op._u = JSON.stringify(L); };
+  op.oninput = () => { if (+op.value >= 1) delete e.opacity; else e.opacity = +op.value; scheduleRender(); };
+  op.onchange = () => { if (op._u) { undo.push(op._u); op._u = null; } afterEdit(false); };
+  P.appendChild(field("Opacity", op));
+  const lockBox = mkCheck(e, "locked", false); lockBox.dataset.keep = "1";
+  P.appendChild(field("Locked", lockBox, "Pins it: it can't be dragged, resized, nudged or deleted until unlocked."));
+  if (e.locked) P.querySelectorAll("input,select,textarea,button").forEach(c => { if (!c.dataset.keep) c.disabled = true; });
+}
+
+// ---------------------------------------------------------------- layout settings
+function drawMeta() {
+  const M = $("meta");
+  M.innerHTML = `<div class="lbl">Layout</div>`;
+  M.appendChild(field("Title", mkText(L, "title")));
+  M.appendChild(field("Type", mkSelect(L, "panel", [["tag", "Driver tag"], ["battle", "Battle box (two cars)"], ["onboard", "On-board gauges"], ["dash", "In-car dash"], ["custom", "Custom"]], "custom")));
+  const sz = document.createElement("div"); sz.className = "row";
+  sz.append("w", mkNum(L, "w", { def: 300 }), "h", mkNum(L, "h", { def: 100 }));
+  M.appendChild(field("Size px", sz));
+  M.appendChild(field("Colours of", mkSelect(L, "accent", ["car", "other", "top", "bottom"], "car"), "Which car @dash colours follow"));
+  if (L.panel === "battle") M.appendChild(field("Row gap", num(L, "rowGap", 1, 34), "How far the two rows slide when the cars swap"));
+  M.appendChild(field("Shows when", mkText(L, "when", { ph: "always" }), "Custom panels: words that must all hold: always race green onboard offboard battle replay"));
+  const u = INFO.layouts.find(l => l.name === name);
+  const hint = document.createElement("div"); hint.className = "hint";
+  hint.textContent = u && u.used ? "On screen as: " + u.used : "Not used by any overlay yet - pick it under Where layouts show.";
+  M.appendChild(hint);
+  M.appendChild(document.createElement("hr"));
+}
+function renderStyles() {
+  const sel = $("styleSel"), cur = INFO.style || "classic";
+  sel.innerHTML = '<option value="dash">Dash</option><option value="classic">Classic</option>' + (INFO.styles || []).map(x => `<option value="preset:${esc(x.name)}">${esc(x.title)}</option>`).join("");
+  sel.value = cur;
+  if (sel.value !== cur) sel.value = "classic";
+  $("bStyleDel").disabled = !cur.startsWith("preset:");
+  const t = sel.options[sel.selectedIndex];
+  $("styleNow").textContent = t ? t.textContent : "";
+}
+$("styleSel").onchange = async () => {
+  const v = $("styleSel").value;
+  if (!confirm("Switch the style? The per-panel layout picks below are cleared and the style's layouts take over.")) { renderStyles(); return; }
+  try { await call("styleuse", { name: v.replace(/^preset:/, "") }, ""); INFO = await call(""); fontCss(); renderStyles(); renderPanels(); toast("Style: " + $("styleSel").selectedOptions[0].textContent); }
+  catch (e) { toast(e.message, true); renderStyles(); }
+};
+$("bStyleSave").onclick = async () => {
+  const title = (prompt("Name for this style (it appears in the Style box):", "RaceVision My Style") || "").trim();
+  if (!title) return;
+  const slug = title.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+  if (!slug) { toast("Use letters or digits in the name.", true); return; }
+  try { await call("stylesave", { name: slug, title }, ""); INFO = await call(""); fontCss(); renderStyles(); renderPanels(); toast("Saved style " + title); }
+  catch (e) { toast(e.message, true); }
+};
+$("bStyleDel").onclick = async () => {
+  const cur = INFO.style || "";
+  if (!cur.startsWith("preset:") || !confirm("Delete this style? Its layouts stay; the style goes back to Classic.")) return;
+  try { await call("styledelete", { name: cur.slice(7) }, ""); INFO = await call(""); renderStyles(); renderPanels(); toast("Style deleted"); } catch (e) { toast(e.message, true); }
+};
+function renderPanels() {
+  const P = $("panels");
+  P.innerHTML = "";
+  INFO.panels.forEach(p => {
+    const row = document.createElement("div"); row.className = "panelrow";
+    const sl = document.createElement("select");
+    sl.innerHTML = `<option value="">${p.key.startsWith("custom") ? "(off)" : "Automatic"}</option>` + INFO.layouts.map(l => `<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("");
+    sl.value = p.set;
+    sl.onchange = async () => {
+      try { await call("use", { panel: p.key, name: sl.value }, ""); toast(p.label + ": " + (sl.value || "automatic")); INFO = await call(""); fontCss(); renderPanels(); }
+      catch (e) { toast(e.message, true); sl.value = p.set; }
+    };
+    const b = document.createElement("b"); b.textContent = p.label;
+    row.append(b, sl); P.appendChild(row);
+  });
+}
+
+// ---------------------------------------------------------------- saving and layouts
+async function save() {
+  try { await call("save", { name }, JSON.stringify(L)); saved = JSON.stringify(L); INFO = await call(""); fontCss(); renderPanels(); afterEdit(true); toast("Saved - the overlay on screen uses it now."); }
+  catch (e) { toast(e.message, true); }
+}
+$("bSave").onclick = save;
+$("bSaveAs").onclick = async () => {
+  const n = (prompt("Name for this layout (letters, digits, _ and -):", name + "_copy") || "").trim();
+  if (!n) return;
+  try { await call("save", { name: n }, JSON.stringify(L)); await load(n); toast("Saved as " + n); } catch (e) { toast(e.message, true); }
+};
+$("bNew").onclick = async () => {
+  const n = (prompt("Name for the new layout (letters, digits, _ and -):", "my_ticker") || "").trim();
+  if (!n) return;
+  const doc = { title: n, panel: "custom", w: 600, h: 60, when: "always", elements: [{ type: "rect", name: "Background", x: 0, y: 0, w: 600, h: 60, radius: 8, fill: "#14161ce6" }, { type: "text", name: "Driver", x: 16, y: 14, w: 400, size: 30, text: "{car.full}", upper: true, color: "@white" }] };
+  try { await call("save", { name: n }, JSON.stringify(doc)); await load(n); toast("Created " + n + ". Pick it for a Custom panel under Where layouts show."); } catch (e) { toast(e.message, true); }
+};
+$("bDelete").onclick = async () => {
+  if (!confirm("Delete the layout " + name + "?")) return;
+  try { await call("delete", { name }, ""); name = ""; await load(); } catch (e) { toast(e.message, true); }
+};
+$("bReset").onclick = async () => {
+  if (!confirm("Put " + name + " back to the built-in version? Your edits to it are lost.")) return;
+  try { await call("reset", { name }, ""); await load(name); toast("Reset."); } catch (e) { toast(e.message, true); }
+};
+window.addEventListener("keydown", ev => {
+  const tag = (ev.target.tagName || "").toLowerCase();
+  const typing = tag === "input" || tag === "textarea" || tag === "select";
+  if (ev.key === "Escape") { closePicker(); $("fontpop").style.display = "none"; }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") { ev.preventDefault(); save(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && !typing) { ev.preventDefault(); doUndo(); return; }
+  if (typing || sel < 0) return;
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "g") { ev.preventDefault(); if (ev.shiftKey) ungroupSel(); else groupSel(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "l") { ev.preventDefault(); toggleLock(); return; }
+  const mine = [...curSet()].filter(j => !L.elements[j].locked), n = ev.shiftKey ? 10 : 1;
+  const k = { ArrowLeft: [-n, 0], ArrowRight: [n, 0], ArrowUp: [0, -n], ArrowDown: [0, n] }[ev.key];
+  if (k) { ev.preventDefault(); if (!mine.length) return; pushUndo(); mine.forEach(j => { const e = L.elements[j]; e.x = (+e.x || 0) + k[0]; e.y = (+e.y || 0) + k[1]; }); afterEdit(false); syncPropNumbers(); }
+  else if (ev.key === "Delete") { if (!mine.length) return; pushUndo(); L.elements = L.elements.filter((_, j) => !mine.includes(j)); sel = -1; sels = new Set(); afterEdit(true); }
+});
+window.addEventListener("beforeunload", ev => { if (L && dirty()) { ev.preventDefault(); ev.returnValue = ""; } });
+load().catch(e => toast(e.message.includes("paired") || e.message.includes("Forbidden") ? "Not paired: open this from RaceVision's Director page (it carries the pairing code)." : e.message, true));
+</script>
+</body>
+</html>

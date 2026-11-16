@@ -51,7 +51,7 @@ static int g_page = pLive;
 static int g_uh = UH;                       // window height now (96-dpi)
 static int g_scroll[PAGES] = {}, g_oy = 0;
 // how far each page's own drawing goes down (from UCY); fields and controls are measured
-static const int PAGE_END[PAGES] = { 604, 0, 0, 1720, 558, 792, 558, 552, 604 };
+static const int PAGE_END[PAGES] = { 604, 0, 0, 1720, 558, 868, 558, 552, 604 };
 
 static HFONT fTitle, fH1, fNav, fLabel, fBody, fSmall, fSection, fBig, fMono, fInput;
 static HBRUSH g_inputBrush, g_bgBrush, g_cardBrush;
@@ -69,23 +69,23 @@ struct Field {
 static std::vector<Field> g_fields;
 struct Section { int page, y; const char *text; };
 static const Section SECTIONS[] = {
-	{ pDirector, 0, "SHOTS" }, { pDirector, 262, "WHEN YOU TAKE OVER" },
+	{ pDirector, 0, "SHOTS" }, { pDirector, 262, "WHEN YOU TAKE OVER" }, { pDirector, 440, "GROUP AND INDY QUALIFYING" },
 	{ pBattles, 0, "BATTLES" }, { pBattles, 186, "START AND RESTARTS" }, { pBattles, 362, "LEAD BATTLES" }, 
 	{ pReplays, 0, "FINDING CRASHES" }, { pReplays, 264, "AUTOMATIC REPLAYS" }, { pReplays, 528, "HOW A REPLAY IS SHOT" },
 	{ pReplays, 792, "PLAY" }, { pReplays, 980, "CRASHES AND HIGHLIGHTS THIS RACE" }, { pReplays, 1722, "SLOW MOTION, WIPE AND PLAYBACK" },
 	{ pReplays, 2280, "OTHER HIGHLIGHTS" },
 	{ pCameras, 0, "CAMERAS PER SHOT" }, { pCameras, 574, "CAMERA CHANGES" }, { pCameras, 762, "OWN ANGLES (TEST)" }, { pCameras, 1482, "DRONE" }, { pCameras, 1680, "DYNAMIC CAMERAS (TEST)" },
-	{ pOverlays, 0, "GRAPHICS" }, { pOverlays, 186, "WHEN THEY SHOW" }, { pOverlays, 602, "PREVIEW (SAMPLE CAR)" },
+	{ pOverlays, 0, "GRAPHICS" }, { pOverlays, 186, "WHEN THEY SHOW" }, { pOverlays, 678, "PREVIEW (SAMPLE CAR)" },
 	{ pArt, 0, "ART FOLDERS" }, { pArt, 262, "SERIES" },
 	{ pPresets, 0, "PRESETS" },
 	{ pPhone, 0, "PAIR A PHONE" },
 };
 struct CamRow { const char *label, *key; bool follow; };
 static const CamRow CAM_ROWS[] = {
-	{ "Crash", "incident", true }, { "Pass", "pass", true }, { "Battle", "battle", true }, { "Leader", "leader", true },
+	{ "Crash", "incident", true }, { "Pass: the car passing", "pass", true }, { "Battle", "battle", true }, { "Leader", "leader", true },
 	{ "Running order tour", "tour", true }, { "Restart", "restart", true }, { "Pit road in", "pit", false },
 	{ "In the pit stall", "pit_stall", false }, { "Pit road out", "pit_exit", false },
-	{ "Qualifying: rolling off", "qual_exit", false }, { "Qualifying run", "qual", true }, { "Crash replay", "replay", false },
+	{ "Qualifying: rolling off", "qual_exit", false }, { "Qualifying run", "qual", true }, { "Crash replay", "replay", false }, { "Pass: the car passed", "pass_passed", false },
 };
 static const char *CamName(int c) {
 	auto own = S.raw.find("cam_label_" + std::to_string(c));        // a name given on the phone's Cameras tab
@@ -119,6 +119,9 @@ static void AddFields() {
 	F(pDirector, "live_after_climb_out", "Back to live when you climb out", "Getting out of your car starts the game's replay; skip it so the broadcast carries on.", fToggle, 430, 288);
 	F(pDirector, "director_view", "Director view", "A live map of the cameras and a timeline of every cut, in your browser (also on the phone).", fAction, 430, 364, 414, 190, "Open director view");
 	F(pDirector, "qual_handoff_m", "Qualifying handoff before stripe (m)", "Switch to the next runner this far before the line. Race Control's timing box leads when it runs.", fNum, 0, 364);
+	F(pDirector, "qual_close_ms", "Group qualifying: close to the pace (ms)", "A car on a timed lap this close to the time to beat (or faster) goes on screen as it nears the line. Crashes still come first.", fNum, 0, 466);
+	F(pDirector, "qual_finish_pct", "Group qualifying: end of lap (%)", "How much of the lap, counted back from the line, counts as the end of the lap.", fNum, 430, 466);
+	F(pDirector, "qual_break_hold", "Group qualifying: shot in a break (s)", "Between rounds the top cars are shown, one shot this long each.", fNum, 0, 542);
 
 	F(pBattles, "battle_gap", "Battle gap (s)", "Two cars this close (seconds) are a battle.", fNum, 0, 26);
 	F(pBattles, "battle_min_age", "Battle must last (s)", "A battle is worth a cut once it has lasted this long.", fNum, 430, 26);
@@ -179,9 +182,9 @@ static void AddFields() {
 	F(pReplays, "reel_highlights", "Highlights in the reel", "The highlight reel plays these with the crashes. Off = crashes only.", fToggle, 0, 2610);
 
 	for (int r = 0; r < (int)(sizeof CAM_ROWS / sizeof CAM_ROWS[0]); r++) {
-		F(pCameras, (std::string("cam_") + CAM_ROWS[r].key).c_str(), "", "", fCams, 180, 64 + r * 40, 0, 130);
+		F(pCameras, (std::string("cam_") + CAM_ROWS[r].key).c_str(), "", "", fCams, 180, 64 + r * 37, 0, 130);
 		if (CAM_ROWS[r].follow)
-			F(pCameras, (std::string("cam_") + CAM_ROWS[r].key + "_follow").c_str(), "", "", fCams, 330, 64 + r * 40, 0, 200);
+			F(pCameras, (std::string("cam_") + CAM_ROWS[r].key + "_follow").c_str(), "", "", fCams, 330, 64 + r * 37, 0, 200);
 	}
 	F(pCameras, "camera_call", "Game camera switch", "Change cameras the way the C key does (keeps camera sounds right).", fToggle, 0, 600, 544);
 	F(pCameras, "onboard_cams", "On-board cameras", "Cameras that count as on-board: they get the in-car dash.", fText, 0, 676, 544, 150);
@@ -229,6 +232,7 @@ static void AddFields() {
 	F(pOverlays, "stage_laps", "Stage end laps", "Laps the stages end on, e.g. 60, 120 (empty = none).", fText, 0, 364, 414, 150);
 	F(pOverlays, "move", "Place on screen", "Drag the panels to move them, mouse wheel to resize.", fAction, 430, 364, 414, 150, "Move overlays");
 	F(pOverlays, "dash_accent2", "Dash plate fade colour", "The driver plate fades from the accent into this. Pick the accent again for a solid plate.", fColor, 0, 516, 414, 120);
+	F(pOverlays, "layout_editor", "Layout editor", "Build your own overlays and tickers in the browser: move every element, choose the data that feeds it, use PNGs from GIMP.", fAction, 0, 592, 414, 150, "Open layout editor");
 	F(pOverlays, "dash_art_colors", "Driver colours from the art", "Each car's dash in its own colour (the art's colors.json). Cars without one keep the accent.", fToggle, 430, 516);
 
 	F(pPhone, "remote", "Phone remote", "Let phones on this network run RaceVision from their browser.", fToggle, 320, 26, 524);
@@ -250,6 +254,11 @@ static std::string g_artWas;                // art folders + series as last used
 static void ApplySettings() {
 	if (g_game) g_game->useCall = S.cameraCall;
 	g_overlaysOn = S.overlays;
+	{   // a new style is the whole look: the per-panel layout picks go
+		static std::string styleWas;
+		if (!styleWas.empty() && styleWas != S.overlayStyle) LayClearPanelKeys();
+		styleWas = S.overlayStyle;
+	}
 	PanelSizes();
 	std::string art = S.artFolders + "|" + S.artSeries;
 	if (art != g_artWas) { g_artWas = art; ArtRoots(); g_artSeries = "?"; PickSeries(); }
@@ -490,11 +499,13 @@ static bool Same(const Field &f, const std::string &a, const std::string &b) {
 	if (f.kind == fCams || f.key == "onboard_cams" || f.key == "stage_laps") return IntList(a) == IntList(b);
 	return _stricmp(a.c_str(), b.c_str()) == 0;
 }
+static std::string ChoicesOf(const Field &f) { return f.key == "overlay_style" ? LayStyleChoices() : f.choices; }      // (the Style box also lists the style presets)
 static std::string ShowVal(const Field &f, const std::string &v) {
 	if (f.kind == fToggle) return atoi(v.c_str()) ? "on" : "off";
 	if (f.kind == fChoice) {
-		size_t at = f.choices.find(v + "|");
-		if (at != std::string::npos) { size_t a = at + v.size() + 1; return f.choices.substr(a, f.choices.find(';', a) - a); }
+		std::string ch = ChoicesOf(f);
+		size_t at = ch.find(v + "|");
+		if (at != std::string::npos) { size_t a = at + v.size() + 1; return ch.substr(a, ch.find(';', a) - a); }
 	}
 	return v.empty() ? "(none)" : v;
 }
@@ -713,7 +724,8 @@ static void MakePreviews() {
 		gr.SetSmoothingMode(SmoothingModeAntiAlias);
 		gr.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
 		gr.Clear(C(0, 0, 0, 0));
-		if (p == &g_tag) { if (dash) DrawTagDash(gr, true); else DrawTag(gr, true); }
+		if (LayDrawPanel(gr, *p, true)) {}
+		else if (p == &g_tag) { if (dash) DrawTagDash(gr, true); else DrawTag(gr, true); }
 		else if (p == &g_battle) { if (dash) DrawBattleDash(gr, true); else DrawBattle(gr, true); }
 		else if (p == &g_dash) DrawDash(gr, true); else DrawOnboard(gr, true);
 		g_prevName[k] = names[k];
@@ -723,7 +735,7 @@ static void MakePreviews() {
 }
 static void PaintPreviews(HDC dc) {
 	if (g_previewDirty) MakePreviews();
-	float x0 = UCX, y0 = UCY + 628, total = 0, gap = 16, hmax = 0;
+	float x0 = UCX, y0 = UCY + 704, total = 0, gap = 16, hmax = 0;
 	for (auto *b : g_prev) if (b) { total += b->GetWidth(); hmax = std::max(hmax, (float)b->GetHeight()); }
 	if (total <= 0) return;
 	float k = std::min({ (UCW - 2 * gap - 24) / total, 104.f / hmax, 0.6f });
@@ -865,9 +877,9 @@ static void PaintPageBody(HDC dc) {
 		UText(dc, "OPENS ON", UCX + 180, UCY + 40, 150, 16, fSection, U_MUTED);
 		UText(dc, "THEN FOLLOWS WITH", UCX + 330, UCY + 40, 200, 16, fSection, U_MUTED);
 		for (int r = 0; r < (int)(sizeof CAM_ROWS / sizeof CAM_ROWS[0]); r++) {
-			int y = UCY + 64 + r * 40;
+			int y = UCY + 64 + r * 37;
 			UText(dc, CAM_ROWS[r].label, UCX + 16, y + 7, 160, 20, fLabel, U_TEXT);
-			if (!CAM_ROWS[r].follow) UText(dc, !strcmp(CAM_ROWS[r].key, "replay") ? "first angle (more: Replays)" : "follows the car along pit road", UCX + 330, y + 8, 200, 20, fSmall, U_MUTED);
+			if (!CAM_ROWS[r].follow) UText(dc, !strcmp(CAM_ROWS[r].key, "replay") ? "first angle (more: Replays)" : !strcmp(CAM_ROWS[r].key, "pass_passed") ? "after follow_after: on the car passed" : "follows the car along pit road", UCX + 330, y + 8, 200, 20, fSmall, U_MUTED);
 		}
 		// the legend, and what the lists say in words for the row under the mouse... kept simple: all of them
 		PaintCard(dc, UCX + 560, UCY + 26, 284, 532);
@@ -1060,7 +1072,7 @@ static void DrawButtonBody(DRAWITEMSTRUCT *d) {
 	}
 	if (f && f->kind == fChoice) {
 		std::vector<std::pair<std::string, std::string>> opts;
-		std::string list = f->choices + ";";
+		std::string list = ChoicesOf(*f) + ";";
 		size_t a = 0, b;
 		while ((b = list.find(';', a)) != std::string::npos) {
 			std::string one = list.substr(a, b - a); a = b + 1;
@@ -1515,7 +1527,7 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 				POINT pt; GetCursorPos(&pt); ScreenToClient(f.h, &pt);
 				RECT r; GetClientRect(f.h, &r);
 				std::vector<std::string> vals;
-				std::string list = f.choices + ";";
+				std::string list = ChoicesOf(f) + ";";
 				size_t a = 0, b;
 				while ((b = list.find(';', a)) != std::string::npos) { std::string one = list.substr(a, b - a); a = b + 1; vals.push_back(one.substr(0, one.find('|'))); }
 				int k = vals.empty() ? 0 : std::min((int)vals.size() - 1, std::max(0, (int)(pt.x * (int)vals.size() / std::max(1L, r.right))));
@@ -1546,6 +1558,11 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 				std::string port = Raw("remote_port"), key = Raw("remote_key");
 				if (Raw("remote") == "0") MessageBoxA(h, "The director view comes from the phone remote's web server. Switch the phone remote on (Phone page) first.", "RaceVision", MB_OK | MB_ICONINFORMATION);
 				else ShellExecuteA(NULL, "open", ("http://127.0.0.1:" + (port.empty() ? std::string("8090") : port) + "/director?k=" + key).c_str(), NULL, NULL, SW_SHOWNORMAL);
+			}
+			else if (f.kind == fAction && f.key == "layout_editor") {
+				std::string port = Raw("remote_port"), key = Raw("remote_key");
+				if (Raw("remote") == "0") MessageBoxA(h, "The layout editor comes from the phone remote's web server. Switch the phone remote on (Phone page) first.", "RaceVision", MB_OK | MB_ICONINFORMATION);
+				else ShellExecuteA(NULL, "open", ("http://127.0.0.1:" + (port.empty() ? std::string("8090") : port) + "/overlays?k=" + key).c_str(), NULL, NULL, SW_SHOWNORMAL);
 			}
 			else if (f.kind == fAction && f.key == "remote_newkey") {
 				if (MessageBoxA(h, "Make a new pairing code? Phones that scanned the old one will have to scan the new one.",
@@ -1752,6 +1769,9 @@ static void CreateUi() {
 		if (f.kind == fNum || f.kind == fText || f.kind == fCams) {
 			std::string value = Raw(f.key);
 			if (value.empty() && f.key == "qual_handoff_m") value = "300";
+			if (value.empty() && f.key == "qual_close_ms") value = "150";
+			if (value.empty() && f.key == "qual_finish_pct") value = "30";
+			if (value.empty() && f.key == "qual_break_hold") value = "20";
 			f.h = MakeCtl("EDIT", ES_AUTOHSCROLL | WS_TABSTOP, id, f.page, b.left + 9, b.top + 7, b.right - b.left - 18, 19, value.c_str());
 		} else {
 			f.h = MakeButton(id, f.page, b.left, b.top, b.right - b.left, b.bottom - b.top, f.kind == fAction ? f.choices.c_str() : "");

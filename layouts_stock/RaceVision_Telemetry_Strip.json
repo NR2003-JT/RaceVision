@@ -1,0 +1,146 @@
+{
+ "title": "RaceVision Telemetry Strip",
+ "panel": "custom",
+ "w": 440,
+ "h": 136,
+ "when": "onboard",
+ "accent": "car",
+ "elements": [
+  {
+   "name": "Panel",
+   "type": "rect",
+   "x": 0,
+   "y": 0,
+   "w": 440,
+   "h": 136,
+   "radius": 10,
+   "fill": "@bg"
+  },
+  {
+   "name": "Driver",
+   "type": "text",
+   "x": 16,
+   "y": 8,
+   "w": 300,
+   "size": 22,
+   "upper": true,
+   "color": "@white",
+   "text": "{car.full}"
+  },
+  {
+   "name": "Throttle bar",
+   "type": "bar",
+   "x": 20,
+   "y": 40,
+   "w": 16,
+   "h": 72,
+   "vertical": true,
+   "src": "car.throttle",
+   "color": "@green",
+   "track": "#323640"
+  },
+  {
+   "name": "Brake bar",
+   "type": "bar",
+   "x": 46,
+   "y": 40,
+   "w": 16,
+   "h": 72,
+   "vertical": true,
+   "src": "car.brake",
+   "color": "@red",
+   "track": "#323640"
+  },
+  {
+   "name": "Throttle label",
+   "type": "text",
+   "x": 12,
+   "y": 114,
+   "w": 32,
+   "size": 11,
+   "align": "center",
+   "color": "@grey",
+   "text": "THR"
+  },
+  {
+   "name": "Brake label",
+   "type": "text",
+   "x": 38,
+   "y": 114,
+   "w": 32,
+   "size": 11,
+   "align": "center",
+   "color": "@grey",
+   "text": "BRK"
+  },
+  {
+   "name": "Speed",
+   "type": "text",
+   "x": 84,
+   "y": 32,
+   "w": 150,
+   "size": 58,
+   "align": "right",
+   "color": "@white",
+   "text": "{car.speed_mph:0}"
+  },
+  {
+   "name": "MPH",
+   "type": "text",
+   "x": 240,
+   "y": 62,
+   "w": 50,
+   "size": 16,
+   "color": "@grey",
+   "text": "MPH"
+  },
+  {
+   "name": "Gear",
+   "type": "text",
+   "x": 330,
+   "y": 28,
+   "w": 90,
+   "size": 64,
+   "align": "center",
+   "color": "@gold",
+   "text": "{car.gear}"
+  },
+  {
+   "name": "GEAR label",
+   "type": "text",
+   "x": 330,
+   "y": 92,
+   "w": 90,
+   "size": 12,
+   "align": "center",
+   "color": "@grey",
+   "text": "GEAR"
+  },
+  {
+   "name": "RPM bar",
+   "type": "segbar",
+   "x": 84,
+   "y": 104,
+   "w": 236,
+   "h": 16,
+   "src": "car.rpm_frac",
+   "segs": 20,
+   "gap": 2,
+   "color": "#ff8c1e",
+   "color2": "#ff8c1e",
+   "hot": 3,
+   "hotColor": "#eb3c28",
+   "track": "#343840"
+  },
+  {
+   "name": "RPM label",
+   "type": "text",
+   "x": 84,
+   "y": 120,
+   "w": 236,
+   "size": 11,
+   "color": "@grey",
+   "text": "{car.rpm:0} RPM"
+  }
+ ]
+}

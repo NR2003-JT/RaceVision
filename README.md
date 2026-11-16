@@ -23,6 +23,10 @@ as [USER GUIDE.txt](USER%20GUIDE.txt), explains the window and every setting.
 - **Overlays, used sparingly.** A driver tag, a battle box, a qualifying delta, and an in-car dash (place, driver,
   speed arc, RPM) on on-board shots, using each driver's number art, headshot and colour. No running-order tower,
   and no extra airtime for your own car.
+- **Overlay layouts.** Every overlay is a layout file you can edit: drag its elements around, resize them, and choose
+  the data that feeds each one (driver, place, speed, RPM, gear, throttle, brake, last / best lap, gap to the car ahead
+  or the leader, battle gap, the race story, any car by running position and more). Use PNG backgrounds drawn in GIMP
+  or any image editor and your own fonts, and build tickers and extra boxes on four custom panels. See "Overlay layouts" below.
 - **Phone remote and director view.** Control RaceVision from a phone, or open `:8090/director` in a browser for a
   live track map, car positions, the cut log, and a timeline recorder. Both work on your own network and need no
   internet connection.
@@ -50,10 +54,46 @@ cameras without the game running.
 
 - `src\tv_director.cpp` the main file. It includes `racevision_ui.cpp` (the window pages), `racevision_remote.cpp`
   (the web server on port 8090) and `racevision_qr.cpp`. Cameras are in `racevision_cams.cpp`,
-  `racevision_camsets.cpp` and `racevision_dyncams.cpp`; `racevision_phone.html` and `racevision_director.html` are
-  the browser pages.
+  `racevision_camsets.cpp` and `racevision_dyncams.cpp`; `racevision_layout.cpp` is the overlay layout engine and
+  its editor calls; `racevision_phone.html`, `racevision_director.html` and `racevision_overlays.html` are the browser pages.
 - `camsets\` camera sets and the menu script.
 - `tools\` camera test scripts.
+
+## Overlay layouts
+
+The overlays are drawn from layout files in `layouts\` next to `RaceVision.exe` (written on first start; the built-in
+looks `tag_classic`, `tag_dash`, `battle_classic`, `battle_dash`, `onboard_classic` and `dash_dash` are layouts too).
+Open the editor from the Overlays page (Open layout editor) or the Director page (Overlays button). The picture on the
+editor's stage is RaceVision's own drawing of the layout, so it matches the screen. A layout is JSON: a size and a list
+of elements.
+
+- Elements: `text`, `run` (text in several colours), `rect` (box, rounded or slanted, gradient, border), `image`
+  (a PNG from `layouts\images`, or a driver's number card / headshot), `portrait`, `bar`, `segbar`, `arc`, `ordinal`
+  ("12TH"). Each has x, y, w, h, an opacity and an optional `show` rule (for example `story.any !replay`).
+- Data: text holds `{tokens}` such as `{car.last}`, `{car.speed_mph:0}` or `{p3.best_lap}`; bars and arcs take a
+  number source such as `car.throttle`. Cars are `car` (on screen), `other`, `top` / `bottom` (the battle box rows),
+  `leader`, `ahead`, `behind` and `p1`...`p99` (running position). Fields are listed in the editor's pickers.
+- Colours: `#rrggbb`, `#rrggbbaa` or tokens such as `@gold`, `@white`, `@car` (the driver's paint colour), `@dash`.
+- Pictures: PNG / JPG from GIMP go in `layouts\images` (the editor's picture picker uploads them) or come from the selected art
+  folder (the picker lists its images; number cards and headshots have their own elements). A `bar` can be made of two pictures
+  (empty and full) that fill left, right, up or down; a `dial` fills a ring picture around its centre; a `needle` turns a picture
+  about a pivot. The driver `portrait` has an optional number banner (off by default in the built-ins; use a Picture set to
+  Number card to place the number yourself).
+- Fonts: `fontpack\` (18 free OFL fonts, licences included) is copied into `layouts\fonts` on first start; any font you add there
+  shows up in the editor's font list, which draws every font in its own face.
+- Editor helpers: grid lines and snap, pink alignment guides to the other elements and the overlay's edges and centre, teal
+  distances to the edges, align buttons, drag-to-reorder layers, and dividers you can drag to resize the panels.
+- Styles: a style is a whole look, which layout each panel uses. The Style box on the Overlays page lists Dash, Classic and every
+  preset in `layouts\presets` (the editor's "Save current look as style" makes one). Picking a style clears the per-panel picks.
+- Overlay pack: `layouts_stock\` (the RaceVision_* layouts, alternates, their art and three style presets) and `fontpack\` ship beside
+  the exe; RaceVision copies what your layouts folder lacks into it once. `RaceVision_Overlay_Pack.zip` is that pack on its own.
+- Groups and locks: in the editor, Shift-click selects several elements; Group (Ctrl+G) makes them move together, Lock (Ctrl+L) pins
+  them in place.
+- Where they show: the editor's "Where layouts show" (ini keys `layout_tag`, `layout_battle`, `layout_onboard`,
+  `layout_dash`, `layout_custom1`...`4`). A custom panel shows by its layout's `when` (`always`, `race`, `green`,
+  `onboard`, `offboard`, `battle`, `replay`; all words must hold). Move the panels on screen with Ctrl+F10 as before.
+- Fonts (`.ttf`, `.otf`) go in `layouts\fonts` and are read when RaceVision starts. A hand-edited layout file is picked up
+  within a second.
 
 ## How it was built
 
@@ -67,4 +107,4 @@ live races and by testers.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+Source-available, see [LICENSE](LICENSE). You can read the source, build it, and fork it on GitHub. Tools that read and write RaceVision's settings, presets and setups are welcome. Please don't redistribute builds or ported copies of the code; point people to the official download instead.

@@ -5,3 +5,5 @@
 101 RCDATA "racevision_phone.html"
 // the director view (/director): live camera map + timeline of the cuts
 103 RCDATA "racevision_director.html"
+// the overlay layout editor (/overlays)
+104 RCDATA "racevision_overlays.html"

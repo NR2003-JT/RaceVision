@@ -1,0 +1,131 @@
+{
+ "title": "RaceVision Dial Gauge (PNG face, ring, needle)",
+ "panel": "custom",
+ "w": 410,
+ "h": 330,
+ "when": "onboard",
+ "accent": "car",
+ "elements": [
+  {
+   "name": "Panel",
+   "type": "rect",
+   "x": 0,
+   "y": 0,
+   "w": 410,
+   "h": 330,
+   "radius": 12,
+   "fill": "@bg"
+  },
+  {
+   "name": "1 Dial face (picture, never moves)",
+   "type": "image",
+   "x": 10,
+   "y": 10,
+   "w": 300,
+   "h": 300,
+   "file": "dial_face.png"
+  },
+  {
+   "name": "2 Ring (dial: empty + full pictures)",
+   "type": "dial",
+   "x": 10,
+   "y": 10,
+   "w": 300,
+   "h": 300,
+   "src": "car.rpm_10k",
+   "from": 135,
+   "sweep": 270,
+   "trackFile": "dial_ring_empty.png",
+   "fillFile": "dial_ring_full.png",
+   "pivotX": 0.5,
+   "pivotY": 0.5
+  },
+  {
+   "name": "3 Needle (picture, turns)",
+   "type": "needle",
+   "x": 140,
+   "y": 152,
+   "w": 150,
+   "h": 16,
+   "src": "car.rpm_10k",
+   "file": "dial_needle.png",
+   "from": 135,
+   "sweep": 270,
+   "pivotX": 0.1333,
+   "pivotY": 0.5
+  },
+  {
+   "name": "4 Hub",
+   "type": "rect",
+   "x": 146,
+   "y": 146,
+   "w": 28,
+   "h": 28,
+   "radius": 14,
+   "fill": "#1b1f27",
+   "stroke": "#c9ced8",
+   "strokeW": 3
+  },
+  {
+   "name": "Speed",
+   "type": "text",
+   "x": 60,
+   "y": 214,
+   "w": 200,
+   "size": 38,
+   "align": "center",
+   "font": "Russo One",
+   "bold": false,
+   "color": "@gold",
+   "text": "{car.speed_mph:0}"
+  },
+  {
+   "name": "MPH",
+   "type": "text",
+   "x": 60,
+   "y": 256,
+   "w": 200,
+   "size": 13,
+   "align": "center",
+   "font": "Saira Condensed",
+   "color": "@grey",
+   "text": "MPH"
+  },
+  {
+   "name": "Throttle (bar: empty + full pictures)",
+   "type": "bar",
+   "x": 356,
+   "y": 30,
+   "w": 36,
+   "h": 240,
+   "src": "car.throttle",
+   "trackFile": "bar_v_empty.png",
+   "fillFile": "bar_v_full.png",
+   "dir": "up"
+  },
+  {
+   "name": "THR label",
+   "type": "text",
+   "x": 340,
+   "y": 278,
+   "w": 68,
+   "size": 12,
+   "align": "center",
+   "font": "Saira Condensed",
+   "color": "@grey",
+   "text": "THROTTLE"
+  },
+  {
+   "name": "THR percent",
+   "type": "text",
+   "x": 340,
+   "y": 294,
+   "w": 68,
+   "size": 18,
+   "align": "center",
+   "font": "Chakra Petch",
+   "color": "@white",
+   "text": "{car.throttle_pct:0}%"
+  }
+ ]
+}

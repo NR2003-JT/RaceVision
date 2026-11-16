@@ -469,6 +469,9 @@ struct Settings {
 	double manualHold = 20.0;        // after you pick a car yourself (V), the director waits this long
 	double qualHandoffM = 300.0;     // qualifying: switch focus this many metres before the next runner's stripe
 	int qualPlayerCam = 1;           // qualifying: your own run (Race Control's `drive`) goes on this camera (your cockpit); 0 = off
+	double qualCloseMs = 150.0;      // group / Indy road qualifying: a timed lap this close to the time to beat (or faster) is worth the cut
+	double qualFinishPct = 30.0;     // ... once it is in the last this-many % of the lap
+	double qualBreakHold = 20.0;     // ... between rounds (break): a shot of the top cars stays this long
 	double battleGap = 0.8;          // seconds between two cars to call it a battle
 	double battleMinAge = 4.0;       // a battle must last this long before it is worth a cut
 	double shortTrackM = 1700;       // tracks shorter than this (metres) are short tracks ...
@@ -494,6 +497,10 @@ struct Settings {
 	double overlayGap = 150;         // ... and the tag / battle box at most once this often (s); the in-car dash
 	                                 // shows on every on-board shot
 	bool tagStory = true;            // classic driver tag: a line about this car's race so far
+	bool overlayLivePos = true;      // overlays show where the car runs on track now (relative to the cars round it), not the last line crossing
+	double passSettle = 0.8, passLeadSettle = 0.35, passAheadM = 1.0, passHold = 1.5;   // a pass counts once the car is this far ahead for this long (s; lead battles quicker); it may cut in after pass_hold s
+	double blowoverM = 4.0, blowoverBonus = 8;   // a car this high above where it ran at that spot last lap has flipped (0 = off); a crash with one is worth this much more
+	double headshotZoom = 1.35;      // driver photo crop: 1 = the whole picture, higher = closer on head and shoulders
 	double tagRotate = 6;            // ... changing to the next fact this often (seconds)
 	std::vector<int> stageLaps;      // laps the stages end on (stage finish positions)
 	bool crowd = false;              // crowd reactions on race events (needs the user's own sound files)
@@ -629,6 +636,12 @@ static const char *DEFAULT_INI =
 	"; your own qualifying run: from Race Control's GO until you are stopped back in your box the camera stays\n"
 	";   in your car on this camera (1 = cockpit); 0 = leave the camera to the director\n"
 	"qual_player_cam = 1\n"
+	"; group and Indy road qualifying (many cars out at once): a car on a timed lap that is inside the last qual_finish_pct %\n"
+	";   of the lap and no more than qual_close_ms (ms) slower than the time to beat (pole; the cut line when there is one)\n"
+	";   goes on screen before it takes the line. Crashes still come first. qual_break_hold = seconds a shot lasts in a break.\n"
+	"qual_close_ms = 150\n"
+	"qual_finish_pct = 30\n"
+	"qual_break_hold = 20\n"
 	"; camera_call = 1 changes cameras through the game's own function (keeps camera sounds right), 0 = memory write\n"
 	"camera_call = 1\n"
 	"; The phone's Cameras tab starts as the game's own camera list in stock order, with three of RaceVision's own cameras added: 23 Drone,\n"
@@ -786,6 +799,22 @@ static const char *DEFAULT_INI =
 	"; classic driver tag: tag_story = 1 adds a line about the race so far (start / now, since the restart,\n"
 	";   stage finishes, last pit stop, laps led), changing every tag_rotate seconds\n"
 	"tag_story = 1\n"
+	"; overlay_live_positions = 1: places on the overlays are the order on track right now (as the cars run), 0 = the official order\n"
+	"overlay_live_positions = 1\n"
+	"; headshot_zoom: how close the driver photo is cropped (1 = whole picture, 1.35 = head and upper body)\n"
+	"headshot_zoom = 1.35\n"
+	"; passes: the car behind counts as through once it is pass_ahead_m ahead for pass_settle s (pass_lead_settle for a lead battle); a pass\n"
+	";   shot may cut in after pass_hold s, and a pass for the lead cuts in almost at once. cam_pass_passed = the cameras shown on the car that was\n"
+	";   passed (after follow_after; e.g. 11 = Rear to see the car coming); cam_pass is the one on the car passing\n"
+	"pass_settle = 0.8\n"
+	"pass_lead_settle = 0.35\n"
+	"pass_ahead_m = 1\n"
+	"pass_hold = 1.5\n"
+	"cam_pass_passed =\n"
+	"; blowovers (a mod lets AI cars flip and fly): a car blowover_m above its own height at that spot last lap is flipping - the director cuts to it\n"
+	";   and its crash replay is worth blowover_bonus more (0 = off)\n"
+	"blowover_m = 4\n"
+	"blowover_bonus = 8\n"
 	"tag_rotate = 6\n"
 	"; laps the stages end on, e.g. stage_laps = 60, 120 (empty = no stage positions)\n"
 	"stage_laps =\n"
@@ -831,6 +860,14 @@ static void LoadSettings() {
 		if (k.rfind("cam_", 0) == 0) { S.cams[k.substr(4)] = IntList(v); continue; }
 		if (k == "onboard_cams") { S.onboard = IntList(v); continue; }
 		double d = atof(v.c_str());
+		if (k == "overlay_live_positions") { S.overlayLivePos = d != 0; continue; }     // (kept out of the chain below: the compiler's nesting limit)
+		if (k == "pass_settle") { S.passSettle = std::max(0.1, std::min(5.0, d)); continue; }
+		if (k == "pass_lead_settle") { S.passLeadSettle = std::max(0.05, std::min(5.0, d)); continue; }
+		if (k == "pass_ahead_m") { S.passAheadM = std::max(0.2, std::min(6.0, d)); continue; }
+		if (k == "pass_hold") { S.passHold = std::max(0.0, std::min(30.0, d)); continue; }
+		if (k == "blowover_m") { S.blowoverM = std::max(0.0, std::min(30.0, d)); continue; }
+		if (k == "blowover_bonus") { S.blowoverBonus = std::max(0.0, std::min(50.0, d)); continue; }
+		if (k == "headshot_zoom") { S.headshotZoom = std::max(1.0, std::min(2.5, d)); continue; }
 		if (k == "min_hold") S.minHold = d;
 		else if (k == "max_hold") S.maxHold = d;
 		else if (k == "incident_hold") S.incidentHold = d;
@@ -838,6 +875,9 @@ static void LoadSettings() {
 		else if (k == "manual_hold") S.manualHold = d;
 		else if (k == "qual_handoff_m") S.qualHandoffM = std::max(0.0, std::min(5000.0, d));
 		else if (k == "qual_player_cam") S.qualPlayerCam = std::max(0, std::min(21, (int)d));
+		else if (k == "qual_close_ms") S.qualCloseMs = std::max(0.0, std::min(5000.0, d));
+		else if (k == "qual_finish_pct") S.qualFinishPct = std::max(5.0, std::min(95.0, d));
+		else if (k == "qual_break_hold") S.qualBreakHold = std::max(3.0, std::min(300.0, d));
 		else if (k == "battle_gap") S.battleGap = d;
 		else if (k == "battle_min_age") S.battleMinAge = d;
 		else if (k == "settle_laps") S.settleLaps = (int)d;
@@ -1043,7 +1083,13 @@ struct Car {
 	int pairWith = -1;               // the car one place ahead in the official order
 	double passSince = -1;           // real time it got ahead of that car on track
 	int gear = -9;                   // -1 reverse, 0 neutral, 1.. forward (-9 = unknown)
-	unsigned aiState = 0;            // AI state object (single-car qualifying)
+	float steer = 0;                 // front wheel steer, degrees, + = left
+	float thr = 0, brk = 0;          // pedals 0..1: throttle from the car block, brake worked out from the slowing (the AI have no brake value)
+	float z = 0, vz = 0, flipUp = 0;  // height and climb speed (m, m/s); how high above its own line at that spot it got when it flipped
+	std::vector<float> zProf;        // its height at each 10 m of the lap, last time round (a blowover is a car well above that)
+	double airSince = -1, flipAt = -1, flipSimT = -1;   // real time it left the ground / was called a blowover; game s of the same
+	std::vector<std::pair<double, float>> mphHist;   // (real time, mph) for the brake
+	unsigned aiState = 0;           // AI state object (single-car qualifying)
 	int stallCount = 0, runEnd = 0, lapNum = 0;
 	// qualifying delta: timed laps start at a line crossing made ON TRACK (never the out lap)
 	unsigned qLastCross = 0;         // last crossing (game ms) we saw
@@ -1064,6 +1110,8 @@ struct Car {
 	double pitStallAt = -1, pitStall = 0;   // game time in the stall
 	bool pitOutPending = false;
 	int storyLaps = -1;
+	// lap times, any session (a layout's last_lap / best_lap): ms between line crossings, whole laps only
+	unsigned lapPrevCross = 0; int lapPrevLaps = -1, lapLastMs = 0, lapBestMs = 0;
 };
 
 static Car g_car[NUM_SLOTS];
@@ -1075,7 +1123,8 @@ static float g_trackIniLen = 0;
 static std::vector<float> g_lapLens;   // lap lengths measured at the line (where the lap distance resets)
 static std::string g_trackName;
 static int g_flag = 0, g_lastFlag = 0, g_session = 0, g_lapsTotal = 0, g_leaderLaps = 0;
-static double g_simT = 0, g_restartUntil = -1, g_fieldSpeed = 0;
+static double g_simT = 0, g_restartUntil = -1, g_fieldSpeed = 0, g_runSpeed = 0;   // g_runSpeed: the fastest car off pit road (qualifying: the field median is the held cars)
+static bool QualLive();                   // group / single-car qualifying is running (below)
 // the replay tape against the game clock, a sample a second: crashes are kept in game seconds, but the tape doesn't
 // always get a frame per tick (tester's Atlanta race: the clock ran 1311 s while the tape got 854 s - replays from
 // "clock seconds back" landed 15 laps early). A replay goes back by TAPE seconds, looked up here.
@@ -1099,6 +1148,7 @@ static void TransitionCover();                                        // waits u
 static void TransitionRelease();                                      // the cut is made: uncover
 struct TrGuard { bool on; TrGuard() : on(false) {} ~TrGuard() { if (on) TransitionRelease(); } };
 static void TrBegin(TrGuard &tg, int kind, const std::string &sub) { if (!S.replayTransition) return; TransitionStart(kind, sub); tg.on = true; TransitionCover(); }
+static bool LeadBattle(int a, int b);
 static int g_passCar = -1, g_passVictim = -1;
 static double g_passAt = -1;
 static int g_greens = 0;            // green flags this race (1 = the start)
@@ -1152,11 +1202,12 @@ static void CarVecs(Crash &c) {
 // how much a crash is worth showing again: the damage done, and more for every car caught up in it (a pile-up beats
 // two cars touching - live 2026-10-26: a 2-car tangle got the replay over the big one). No damage read = by cars.
 static bool g_dmgSeen = false;               // this race's damage can be read (a car's damage went up)
+static int FlipCar(const Crash &c);          // a car in this crash that blew over (flipped / flew), -1 = none
 static double Worth(const Crash &c) {
 	if (c.kind) return c.score;
 	double n = (double)c.cars.size();
-	if (c.damage > 0) return c.damage + 0.5 * (n - 1);
-	return g_dmgSeen ? 0 : 0.8 * n;              // damage is read and nobody took any: not worth a replay
+	double base = c.damage > 0 ? c.damage + 0.5 * (n - 1) : g_dmgSeen ? 0 : 0.8 * n;   // (damage read and nobody took any: not worth a replay)
+	return FlipCar(c) >= 0 ? base + S.blowoverBonus : base;
 }
 // every contact (damage going up), the last 2 minutes: the crash log looks back at them
 struct Contact { int car; double start, end, peakAt; float gain, peak, dist; int nearCar; bool used; float rear = 0, front = 0; };
@@ -1224,6 +1275,7 @@ static void ResetRace() {
 		c.scoredLaps = -1; c.spos = 0;
 		c.startPos = c.restartPos = 0; c.lapsLed = 0; c.ledLap = -1; c.pits = c.pitLap = c.pitInPos = c.pitOutPos = 0;
 		c.pitStallAt = -1; c.pitStall = 0; c.pitOutPending = false; c.storyLaps = -1;
+		c.lapPrevCross = 0; c.lapPrevLaps = -1; c.lapLastMs = c.lapBestMs = 0;
 		for (int s = 0; s < 8; s++) c.stagePos[s] = c.stageBase[s] = 0;
 	}
 	g_greens = 0; g_firstLeaderLaps = -1; g_greenNow = false; g_raceNo++;
@@ -1411,6 +1463,11 @@ static std::string DmgText(int i, double from) {
 struct Crash; static void CrashSweepContacts(Crash &cr);
 // a car just crashed / stopped: add it to the crash it belongs to (one still going on, close by on track or with a
 // car it was next to), or start a new one
+static int FlipCar(const Crash &c) {
+	for (int i : c.cars)
+		if (i >= 0 && i < NUM_SLOTS && g_car[i].flipSimT >= 0 && g_car[i].flipSimT >= c.first - 30 && g_car[i].flipSimT <= c.lastAt + 30) return i;
+	return -1;
+}
 static void CrashNote(int i, const char *why) {
 	if (g_session != SESSION_RACE) return;
 	for (auto &c : g_crashes)                        // still in one (a stopped car is seen again every incident_hold)
@@ -1613,7 +1670,7 @@ static void Poll(Game &g) {
 	static double lastNames = -100;
 	bool names = Now() - lastNames > 5;
 	if (names) lastNames = Now();
-	std::vector<float> speeds;
+	std::vector<float> speeds; float runTop = 0;
 	for (int i = 0; i < NUM_SLOTS; i++) {
 		Car &c = g_car[i];
 		if (i == PACE_SLOT || !g.Read(BLOCK0 + i * BLOCK_SIZE, buf.data(), BLOCK_SIZE)) { c.valid = false; continue; }
@@ -1667,6 +1724,51 @@ static void Poll(Game &g) {
 			}
 		}
 		c.gear = buf[OFF_GEAR] <= 10 ? (int)buf[OFF_GEAR] - 1 : -9;   // -1 reverse, 0 neutral, 1.. forward
+		{   // blowover: a mod lets AI cars flip and fly. A car well above where it ran at this spot last lap has left the ground.
+			const float BUCKET = 10;
+			float z = F(6630), vz = F(OFF_VEL + 8);
+			c.z = z == z ? z : 0; c.vz = vz == vz ? vz : 0;
+			int nb = (int)(std::max(g_trackLen, 400.0f) / BUCKET) + 2, bk = (int)(c.dist / BUCKET) % nb;
+			if ((int)c.zProf.size() != nb) c.zProf.assign(nb, NAN);
+			float ref = c.zProf[bk], up = ref == ref ? c.z - ref : 0;
+			if (!c.pit && (ref != ref || up < 1.5f)) c.zProf[bk] = ref == ref ? ref * 0.5f + c.z * 0.5f : c.z;   // on the ground: learn the line
+			double tn = Now();
+			if (S.blowoverM > 0 && !c.pit && ref == ref && up > (float)S.blowoverM && c.speed > 10) {
+				if (c.airSince < 0) c.airSince = tn;
+				c.flipUp = std::max(c.flipUp, up);
+				if (tn - c.airSince > 0.15 && (c.flipAt < 0 || tn - c.flipAt > 20)) {
+					c.flipAt = tn; c.flipSimT = SimClock(g);
+					c.incidentAt = tn; c.incidentWhy = "BLOWOVER";                 // the live director cuts to it like any crash
+					Log("           BLOWOVER %s: %.1f m above its line at this spot last lap, climbing %.1f m/s\n", Name(i).c_str(), c.flipUp, c.vz);
+					CrashNote(i, "BLOWOVER");
+				}
+			} else if (up < 2.0f) { c.airSince = -1; c.flipUp = 0; }
+		}
+		{   // pedals, as RaceControl's telemetry strip reads them: throttle = the car block's driver input (+6398);
+			// brake = how hard the car slows with the pedal off (the same rule as its recorder, Telemetry.cs)
+			float t = F(6398);
+			c.thr = (t == t) ? std::min(1.0f, std::max(0.0f, t)) : 0;
+			double tn = g_simT; float mph = c.speed * 2.23694f;       // the game clock: time acceleration and pausing don't change the brake
+			auto &q = c.mphHist;
+			if (!q.empty() && tn < q.back().first) q.clear();
+			if (q.empty() || tn > q.back().first) q.push_back({ tn, mph });
+			while (q.size() > 2 && tn - q.front().first > 0.6) q.erase(q.begin());
+			float rb = F(6394);                                    // the brake slot: always 0 for the AI, the real pedal on the car being driven
+			float st = F(6318);                                    // front wheel steer, rad, + = left
+			c.steer = st == st ? st * 57.2958f : 0;
+			if (rb == rb && rb > 0.01f) c.brk = std::min(1.0f, rb);
+			else if (c.thr > 0.05f) c.brk = 0;
+			else {
+				auto from = q.front();
+				for (auto &p : q) { if (tn - p.first >= 0.25) from = p; else break; }
+				double dt = q.back().first - from.first;
+				if (dt >= 0.1) {
+					double decel = (from.second - q.back().second) / dt, v = (from.second + q.back().second) / 2, coast = 1.5 + 6 * (v / 200) * (v / 200);
+					float b = mph < 2 ? 0.f : (float)std::min(1.0, std::max(0.0, (decel - coast) / 35));
+					c.brk = c.brk * 0.4f + b * 0.6f;
+				}
+			}
+		}
 		// the lap length the game's lap distance really uses: at the line it drops from about the lap length
 		// to near 0; last reading + distance driven since - new reading = one lap. The median of these
 		// replaces track.ini's figure, which can be off by a few car lengths
@@ -1685,11 +1787,11 @@ static void Poll(Game &g) {
 			std::nth_element(l.begin(), l.begin() + l.size() / 2, l.end());
 			g_trackLen = l[l.size() / 2];
 		} else if (c.dist > g_trackLen) g_trackLen = c.dist;     // a lap distance longer than track.ini says wins
-		if (!c.out) speeds.push_back(c.speed);
+		if (!c.out) { speeds.push_back(c.speed); if (!c.pit) runTop = std::max(runTop, c.speed); }
 	}
 	if (speeds.empty()) { g_order.clear(); return; }
 	std::sort(speeds.begin(), speeds.end());
-	g_fieldSpeed = speeds[speeds.size() / 2];
+	g_fieldSpeed = speeds[speeds.size() / 2]; g_runSpeed = runTop;
 	g_simT = SimClock(g);
 	double now = Now();
 	float L = std::max(g_trackLen, 400.0f);
@@ -1725,6 +1827,13 @@ static void Poll(Game &g) {
 		}
 		if (c.laps > 0 && !c.cross) exact = false;
 		if (c.scoredLaps != c.laps) { c.scoredLaps = c.laps; c.seq = ++seq; }
+		if (c.cross && c.laps != c.lapPrevLaps) {              // a lap done: its time, when the one before it was seen too
+			if (c.lapPrevLaps >= 1 && c.laps == c.lapPrevLaps + 1 && c.cross > c.lapPrevCross) {
+				int lap = (int)(c.cross - c.lapPrevCross);
+				if (lap > 5000 && lap < 400000) { c.lapLastMs = lap; if (!c.lapBestMs || lap < c.lapBestMs) c.lapBestMs = lap; }
+			}
+			c.lapPrevLaps = c.laps; c.lapPrevCross = c.cross;
+		}
 	}
 	// qualifying (practice): timed laps and their distance/time trace, on the game's session clock
 	// (the crossing times are on the same clock, measured live 2026-10-20: within a few ms)
@@ -1772,7 +1881,9 @@ static void Poll(Game &g) {
 		for (auto &s : c.hist) top = std::max(top, s.v);
 		if (c.trace.empty() || g_simT > c.trace.back().t) c.trace.push_back({ g_simT, c.speed, c.dist, c.head, c.dmgTotal });
 		while (c.trace.size() > 2 && g_simT - c.trace.front().t > 30) c.trace.erase(c.trace.begin());
-		if (!c.pit && g_fieldSpeed > 25 && top - c.speed > S.crashDrop && now - c.incidentAt > S.incidentHold &&
+		bool qOk = !QualLive() || g_car[i].aiState == AI_PRACTICE || DmgGain(i, g_simT - S.crashWindow - 1.5) > 0.02f;   // qualifying: slowing for pit road is not a crash
+		double moving = QualLive() ? std::max(g_fieldSpeed, g_runSpeed) : g_fieldSpeed;   // (the held cars drag the median to 0)
+		if (!c.pit && qOk && moving > 25 && top - c.speed > S.crashDrop && now - c.incidentAt > S.incidentHold &&
 		    !Checkup(i, top - c.speed)) {
 			c.incidentAt = now; c.incidentWhy = "CRASH";
 			CrashNote(i, "CRASH");
@@ -1790,7 +1901,7 @@ static void Poll(Game &g) {
 			c.pitPhase = phase; c.pitPhaseAt = now;
 		}
 		// stopped on track while the field is moving
-		if (!c.pit && c.speed < 3 && g_fieldSpeed > 20) {
+		if (!c.pit && qOk && c.speed < 3 && moving > 20) {
 			if (c.stoppedSince < 0) c.stoppedSince = g_simT;
 			else if (g_simT - c.stoppedSince > 2 && now - c.incidentAt > S.incidentHold) {
 				// under caution a car stopped with no hit and no damage is stacked up behind the pace car or the cars
@@ -1815,9 +1926,9 @@ static void Poll(Game &g) {
 		h.push_back({ now, (float)(fabs(d) / std::max(cb.speed, 10.0f)) });
 		while (h.size() > 2 && now - h.front().t > 6) h.erase(h.begin());
 		bool racing = g_flag == FLAG_GREEN && !g_car[a].pit && !cb.pit && cb.speed > 20 && fabs(d) < 60 && SameLap(a, b);
-		if (racing && d < -2) {
+		if (racing && d < -S.passAheadM) {      // (it used to take 2 m for 2 s: the cut came when the pass was long settled)
 			if (cb.passSince < 0) cb.passSince = now;
-			else if (now - cb.passSince > 2 && !cb.passed) { cb.passed = true; g_passCar = b; g_passVictim = a; g_passAt = now; }
+			else if (now - cb.passSince > (LeadBattle(a, b) ? S.passLeadSettle : S.passSettle) && !cb.passed) { cb.passed = true; g_passCar = b; g_passVictim = a; g_passAt = now; }
 		} else if (d > 0) { cb.passSince = -1; cb.passed = false; }
 	}
 	HighlightWatch();
@@ -1921,10 +2032,11 @@ static std::vector<Cand> Candidates() {
 		out.push_back(k);
 	}
 	// a pass on track, just now
-	if (g_passCar >= 0 && now - g_passAt < 3.0 && Ahead(g_passCar, g_passVictim) > 0 &&
+	if (g_passCar >= 0 && now - g_passAt < (LeadBattle(g_passCar, g_passVictim) ? 6.0 : 3.5) && Ahead(g_passCar, g_passVictim) > 0 &&
 	    (!settle || std::min(g_car[g_passCar].spos, g_car[g_passVictim].spos) <= S.settlePositions)) {
 		Cand k; k.car = g_passCar; k.kind = kPass; k.other = g_passVictim;
 		k.score = 65 * PosWeight(std::min(g_car[g_passCar].spos, g_car[g_passVictim].spos)) * novelty(g_passCar);
+		if (LeadBattle(g_passCar, g_passVictim)) k.score *= 1.6;      // a pass for the lead is the shot
 		k.why = "gets by " + Short(g_passVictim);
 		out.push_back(k);
 	}
@@ -2214,11 +2326,112 @@ static void ReadKo() {
 	lastGood = now;
 }
 
+static bool QualLive() { return g_session == SESSION_PRACTICE && (g_qual || g_ko.on); }
+static bool QualDeltaVs(int car, int ref, int refMs, int &delta);   // below: live delta of a car's timed lap against another car's time
+
+// A crash during qualifying (any format) comes before everything but your own run and a car you picked yourself.
+// The cut and the follow cameras are the race's (incident, incident_follow). A wreck is shown for about incident_hold
+// and not again for 40 s: a car stopped on track is re-reported every incident_hold.
+static std::map<int, double> g_qualCrashShown;
+static bool QualCrash(Game &g) {
+	double now = Now(), age = now - g_shot.since;
+	if (g_shot.kind == kManual && age < S.manualHold) return false;
+	int best = -1; double bs = 0;
+	for (int i : g_order) {
+		const Car &c = g_car[i];
+		if (!c.valid || c.incidentAt <= 0 || now - c.incidentAt >= S.incidentHold) continue;
+		auto it = g_qualCrashShown.find(i);
+		bool showing = i == g_shot.car && g_shot.kind == kIncident;
+		if (it != g_qualCrashShown.end() && (showing ? now - it->second > S.incidentHold + 4 : now - it->second < 40)) continue;
+		double sc = 100 * (1 - 0.4 * (now - c.incidentAt) / S.incidentHold) + (showing ? 5 : 0);
+		if (sc > bs) { bs = sc; best = i; }
+	}
+	if (best < 0) return false;
+	if (best == g_shot.car && g_shot.kind == kIncident) {          // same wreck: follow cameras as in a race
+		bool onCam = IsOnboard(g_lastCam);
+		if (!g_shot.following && age > S.followAfter) {
+			g_shot.following = true; g_shot.camAt = now; SetCam(g, NextCam("incident_follow"));
+		} else if (g_shot.following && S.cameraEvery > 0 && now - g_shot.camAt > (onCam ? std::max(S.cameraEvery, S.onboardHold) : S.cameraEvery)) {
+			g_shot.camAt = now; SetCam(g, NextCam("incident_follow"));
+		}
+		return true;
+	}
+	char why[96];
+	Cand k; k.car = best; k.kind = kIncident; k.score = bs;
+	snprintf(why, sizeof why, "%s in qualifying, %.0f mph", g_car[best].incidentWhy, g_car[best].speed * 2.237f); k.why = why;
+	g_qualCrashShown[best] = now;
+	Cut(g, k);
+	return true;
+}
+
+// Between rounds (Race Control's `break`) nobody is on a timed lap: the cars sit in their boxes. Instead of leaving
+// the last shot up for minutes, show the top of the board one car at a time (qual_break_hold seconds each, pit camera).
+static bool g_qualBreakOn = false;                      // (KoDirect clears it when the break is over)
+static bool QualBreak(Game &g) {
+	static int idx = 0; static double at = -1000;
+	double now = Now();
+	if (!g_qualBreakOn) { g_qualBreakOn = true; idx = 0; at = -1000; Log("Qualifying break (after round %d): showing the top of the board.\n", g_ko.round); }
+	if (g_shot.kind == kManual && now - g_shot.since < S.manualHold) return true;
+	if (now - at < S.qualBreakHold) return true;
+	std::vector<int> pool;
+	for (auto &e : g_ko.board) { if (pool.size() >= 3) break; if (e.first >= 0 && e.first < NUM_SLOTS && g_car[e.first].valid) pool.push_back(e.first); }
+	if (pool.empty()) return true;                       // no times yet: leave the picture alone
+	int pick = pool[idx++ % pool.size()];
+	at = now;
+	if (g_shot.car >= 0) g_car[g_shot.car].lastShown = now;
+	int cam = QualCam("pit_stall", "tour");
+	bool ok = g.Set(cam, pick);
+	if (ok && cam >= 0) g_lastCam = cam;
+	SYSTEMTIME st; GetLocalTime(&st);
+	Log("[%02d:%02d:%02d] BREAK    %-28s P%d on the board  cam %d\n", st.wHour, st.wMinute, st.wSecond, Name(pick).c_str(), (int)(std::find_if(g_ko.board.begin(), g_ko.board.end(), [&](const std::pair<int, int> &e) { return e.first == pick; }) - g_ko.board.begin()) + 1, cam);
+	g_shot.car = pick; g_shot.kind = kTour; g_shot.other = -1; g_shot.since = g_shot.camAt = now; g_shot.why = "qualifying break"; g_shot.following = false;
+	return true;
+}
+
+// The car to be on as a timed lap comes to the line: the one furthest under (or closest to) the time to beat. The time to
+// beat is the board's best (a new fastest lap) and, where a round has a cut line, the last time that gets through (a car
+// outside the cut that would move inside it). Only cars in the last qual_finish_pct % of a timed lap count, and only
+// those within qual_close_ms of the time (or faster). Higher score = better story.
+static int HotLap(double &score, std::string &why) {
+	score = 0;
+	if (g_ko.board.empty() || g_trackLen < 400) return -1;
+	int pole = g_ko.board[0].first, poleMs = g_ko.board[0].second;
+	int cutCar = -1, cutMs = 0, cut = g_ko.cutoff;
+	if (cut > 0 && (int)g_ko.board.size() >= cut) { cutCar = g_ko.board[cut - 1].first; cutMs = g_ko.board[cut - 1].second; }
+	int best = -1; double close = std::max(S.qualCloseMs, 1.0);
+	for (int i : g_order) {
+		const Car &c = g_car[i];
+		if (!c.valid || c.pit || c.aiState != AI_PRACTICE || c.qLapStart < 0 || c.dist < g_trackLen * (1 - S.qualFinishPct / 100.0) || c.dist > g_trackLen) continue;
+		int pos = 0;
+		for (size_t p = 0; p < g_ko.board.size(); p++) if (g_ko.board[p].first == i) pos = (int)p + 1;
+		double sc = 0; char w[96] = ""; int d;
+		if (QualDeltaVs(i, pole, poleMs, d) && i != pole && d <= close) {
+			sc = d <= 0 ? 100 + std::min(40.0, -d / 25.0) : 75 - 25 * d / close;
+			snprintf(w, sizeof w, "%+.3f to pole, %.0f m from the line", d / 1000.0, g_trackLen - c.dist);
+		}
+		if (cutCar >= 0 && i != cutCar && (pos == 0 || pos > cut) && QualDeltaVs(i, cutCar, cutMs, d) && d <= close) {
+			double s2 = d <= 0 ? 85 + std::min(20.0, -d / 25.0) : 60 - 20 * d / close;
+			if (s2 > sc) { sc = s2; snprintf(w, sizeof w, "%+.3f to the cut, %.0f m from the line", d / 1000.0, g_trackLen - c.dist); }
+		}
+		if (sc <= 0) continue;
+		sc += pos > 0 ? std::max(0, 6 - pos) : 0;      // a car already on the board is a bigger name than a first lap
+		if (sc > score) { score = sc; best = i; why = w; }
+	}
+	return best;
+}
+
 static bool KoDirect(Game &g) {
 	ReadKo();
-	if (!g_ko.on || g_ko.mode != "knockout" || g_session != SESSION_PRACTICE ||
-	    (g_ko.phase != "running" && g_ko.phase != "checkered")) return false;
+	if (!g_ko.on || g_ko.mode != "knockout" || g_session != SESSION_PRACTICE) return false;
+	bool live = g_ko.phase == "running" || g_ko.phase == "checkered";
+	bool brk = g_ko.phase == "break";
+	if (!brk) g_qualBreakOn = false;
+	if (!live && !brk) return false;
 	double now = Now(), age = now - g_shot.since;
+	if (brk) {
+		if (QualCrash(g)) return true;
+		return QualBreak(g);
+	}
 	if (g_ko.round != g_koRound) {
 		g_koRound = g_ko.round; g_koBest.clear();
 		Log("Knockout qualifying round %d: following the cars on track.\n", g_ko.round);
@@ -2249,9 +2462,25 @@ static bool KoDirect(Game &g) {
 	for (auto &e : g_ko.board) g_koBest[e.first] = e.second;
 	if (first) hot = -1;                                    // don't treat the first read as news
 	if (g_shot.kind == kManual && age < S.manualHold) return true;
+	if (QualCrash(g)) return true;                          // a wreck comes before the runs
+	// a timed lap coming to the line at (or near) the time to beat: be on it before it crosses. The car on screen is
+	// kept through the line and a few seconds of its result (unless the new one is a faster-than-pole lap).
+	double hotScore = 0, curScore = 0; std::string hotWhy;
+	int hotLap = HotLap(hotScore, hotWhy);
+	if (g_shot.car >= 0 && g_shot.car < NUM_SLOTS) {
+		const Car &sc = g_car[g_shot.car];
+		bool resultHeld = now - sc.qLastLapAt < 4.0;
+		if (resultHeld) curScore = 120;
+		else if (hotLap == g_shot.car) curScore = hotScore;
+		else if (sc.valid && sc.aiState == AI_PRACTICE && sc.qLapStart >= 0 && g_trackLen > 400 && sc.dist > g_trackLen * (1 - S.qualFinishPct / 100.0)) curScore = 25;   // in the finish zone, nothing special
+	}
 	int pick = -1;
-	if (hot >= 0 && hot != g_shot.car && age > 2.0) pick = hot;
-	else if (g_shot.car < 0 || !onTrack(g_shot.car) || age > S.minHold * 1.5) {
+	if (hotLap >= 0 && hotLap != g_shot.car && age > 2.0 && hotScore > curScore + 5) {
+		pick = hotLap;
+		snprintf(why, sizeof why, "%s", hotWhy.c_str());
+	}
+	else if (hot >= 0 && hot != g_shot.car && age > 2.0 && curScore < 60) pick = hot;
+	else if (g_shot.car < 0 || !onTrack(g_shot.car) || (curScore < 50 && age > S.minHold * 1.5)) {   // (a hot lap or a fresh result stays up)
 		// rotate: the bubble (around the cut), then the fastest car, then anyone on track not seen lately
 		std::vector<int> pool;
 		if (g_ko.cutoff > 0)
@@ -2347,6 +2576,7 @@ static bool QualDirect(Game &g) {
 	}
 	if (!on) return false;
 	double now = Now();
+	if (QualCrash(g)) return true;                // a wreck comes before the runs (the runs pick up again afterwards)
 	// Race Control names the car its timing box is on: the camera goes to the same car, so the box and the picture
 	// change over together (the result through the in-lap, then the next car before it takes the green).
 	bool boxLed = g_ko.on && g_ko.mode == "single" && g_ko.phase == "running" && g_ko.focus >= 0 && g_ko.focus < NUM_SLOTS &&
@@ -2573,6 +2803,7 @@ static void Direct(Game &g) {
 					pair = &k;
 		bool keep = battleShot && (pair || alive());
 		int was = g_shot.other;
+		Kind wasKind = g_shot.kind;
 		if (best->kind > g_shot.kind && !(keep && (best->kind == kPass || best->kind == kBattle) && best->other != g_shot.other)) {
 			g_shot.kind = best->kind; g_shot.other = best->other; g_shot.why = best->why;
 		} else if (battleShot) {
@@ -2585,6 +2816,29 @@ static void Direct(Game &g) {
 			Log("           battle partner now %s (was %s)\n", Name(g_shot.other).c_str(), Name(was).c_str());
 		std::string key = KindKey[g_shot.kind];
 		if (g_shot.kind == kPit) return;            // pit cameras follow the phases above
+		if (g_shot.kind == kPass && wasKind != kPass && age > 1.0) {   // the battle just became a pass: the pass camera, now
+			int pc = NextCam("pass");
+			if (pc >= 0 && !TvHold(g, pc, g_shot.car)) {
+				g_shot.camAt = now; g_tlCamWhy = "the battle became a pass";
+				SetCam(g, DynPick(g, kPass, g_shot.car, g_shot.other, g_car[g_shot.car].pitPhase, pc));
+				return;
+			}
+		}
+		// a pass shot, once it moves on to its follow cameras, can show the car that was passed (cam_pass_passed):
+		// the shot's car and partner swap (the same pair), so the overlays talk about the right driver
+		if (g_shot.kind == kPass && !g_shot.following && age > S.followAfter && g_shot.other >= 0 && g_car[g_shot.other].valid &&
+		    !g_car[g_shot.other].pit && !S.cams["pass_passed"].empty()) {
+			int pc = NextCam("pass_passed");
+			if (pc >= 0 && !TvHold(g, pc, g_shot.other)) {
+				int passed = g_shot.other, passer = g_shot.car;
+				g_car[passer].lastShown = now;
+				g_shot.car = passed; g_shot.other = passer; g_shot.following = true; g_shot.camAt = now;
+				g_tlCamWhy = "the car that was passed";
+				SetCam(g, pc);
+				Log("           pass: now on %s, passed by %s - cam %d\n", Name(passed).c_str(), Name(passer).c_str(), pc);
+				return;
+			}
+		}
 		if (!g_shot.following && age > S.followAfter) {
 			if (TvHold(g, PeekCam(key + "_follow"), g_shot.car)) return;
 			g_shot.following = true; g_shot.camAt = now;
@@ -2600,7 +2854,13 @@ static void Direct(Game &g) {
 		return;
 	}
 	bool crash = best->kind == kIncident && g_shot.kind != kIncident;
+	// a pass doesn't wait out the whole minimum shot (the cut used to come after the cars had settled): pass_hold s, and
+	// a pass for the lead almost at once, with no margin over what is on screen (a crash on screen still wins)
+	bool passIn = best->kind == kPass && g_shot.kind != kIncident && g_shot.kind != kPit;
+	bool leadPass = passIn && LeadBattle(best->car, best->other);
 	if (g_shot.car < 0 || (crash && age > 1.0) ||
+	    (leadPass && age > 0.8 && best->score > cur) ||
+	    (passIn && age > std::min(minHold, S.passHold) && best->score > cur * S.switchMargin + 3) ||
 	    (age > minHold && best->score > cur * S.switchMargin + 3) ||
 	    (age > minHold && cur == 0)) {
 		// not right on top of a TV camera change on screen (crashes never wait)
@@ -2713,7 +2973,9 @@ static std::vector<Take> BuildTakes(Crash &c, int angles) {
 	int first = NextCam("replay");
 	std::vector<Take> t;
 	double guide0 = c.impactAt >= 0 ? c.impactAt : c.first;
-	Take t0; t0.car = c.impactCar >= 0 ? c.impactCar : CrashLead(c); t0.cam = first; t0.guide = guide0;
+	int flip = FlipCar(c);                           // a blowover: the first angle is the car that flew, from its take-off
+	if (flip >= 0 && g_car[flip].flipSimT > 0) guide0 = g_car[flip].flipSimT;
+	Take t0; t0.car = flip >= 0 ? flip : c.impactCar >= 0 ? c.impactCar : CrashLead(c); t0.cam = first; t0.guide = guide0;
 	double end = std::max(std::min(c.lastAt, guide0 + 10.0) + 4.0, guide0 + 8.0);
 	t0.len = S.replayPreroll + std::min(end - guide0, S.replayMax);
 	t.push_back(t0);
@@ -2768,7 +3030,7 @@ static bool RollTake(Game &g, int k) {
 	if (!c || k >= (int)g_rp.takes.size()) return false;
 	Take &tk = g_rp.takes[k];
 	TrGuard tg;
-	if (k > 0) TrBegin(tg, 2, "ANGLE " + std::to_string(k + 1));     // (the first take rides the wipe ReplayStart began)
+	if (k > 0) TrBegin(tg, 2, "REPLAY");     // (the first take rides the wipe ReplayStart began)
 	if (g.Get<int>(RP_MODE, -1) != 0) {
 		g.MainThreadCall(FN_REPLAY_STOP, 1, 0, 0);
 		bool live = false;
@@ -2851,7 +3113,12 @@ static void ReplayStart(Game &g, int crashId, bool byHand, int angles = -1, bool
 		Log("[%02d:%02d:%02d] REPLAY   race paused for the replay (you're in your car)\n", st.wHour, st.wMinute, st.wSecond);
 	}
 	TrGuard tg;
-	TrBegin(tg, 0, std::string(c->kind ? (c->what.empty() ? HlTitle(c->kind) : c->what.c_str()) : "CRASH") + "  -  " + CrashWho(*c, 2));
+	{   // the wipe names the title and only the car the replay follows (not everyone caught up in it)
+		int focus = FlipCar(*c) >= 0 ? FlipCar(*c) : c->impactCar >= 0 ? c->impactCar : CrashLead(*c);
+		if ((focus < 0 || focus >= NUM_SLOTS || !g_car[focus].valid) && !c->cars.empty()) focus = c->cars[0];
+		std::string who = focus >= 0 && focus < NUM_SLOTS && g_car[focus].valid ? "#" + NumLabel(g_car[focus].number) + " " + Short(focus) : "";
+		TrBegin(tg, 0, std::string(c->kind ? (c->what.empty() ? HlTitle(c->kind) : c->what.c_str()) : FlipCar(*c) >= 0 ? "BLOWOVER" : "CRASH") + (who.empty() ? "" : "  -  " + who));
+	}
 	g_rp = ReplayRun(); g_tpManual = false;
 	g_rp.paused = pausedHere;
 	g_rp.crash = c->id; g_rp.byHand = byHand; g_rp.ticks0 = g.Get<int>(GAME_TICKS, 0);
@@ -3126,7 +3393,8 @@ static Panel g_alert = { "alert", 460, 100 };       // crash alert / replay coun
 static Panel g_qualBox = { "qual", 420, 96 };       // qualifying: pole + live delta of the car on screen
 static void DrawQual(Graphics &gr, bool sample);
 static void DrawAlert(Graphics &gr, bool sample);
-static Panel *g_panels[] = { &g_tag, &g_battle, &g_onboard, &g_dash, &g_alert };   // g_qualBox: Race Control shows qualifying timing now
+static Panel g_custom[4] = { { "custom1", 400, 60 }, { "custom2", 400, 60 }, { "custom3", 400, 60 }, { "custom4", 400, 60 } };   // tickers etc. built in the layout editor (racevision_layout.cpp)
+static Panel *g_panels[] = { &g_tag, &g_battle, &g_onboard, &g_dash, &g_alert, &g_custom[0], &g_custom[1], &g_custom[2], &g_custom[3] };   // g_qualBox: Race Control shows qualifying timing now
 static bool g_edit = false, g_overlaysOn = true;
 static Game *g_game = nullptr;
 
@@ -3308,12 +3576,10 @@ static float InkWidth(Graphics &gr, const std::wstring &ws, const Font &font) {
 // how far the drawn letters really reach from where the text starts. MeasureString leaves out GDI+'s
 // made-up bold / italic (the condensed font has neither), so the text is drawn off screen and looked at;
 // remembered, as the same strings come round every frame
-static float InkReach(const std::wstring &ws, const Font &font) {
+static float InkReach(const std::wstring &ws, const Font &font, const wchar_t *name) {      // (name: its family's; asking the Font for its family and freeing the copy breaks fonts from a private collection)
 	static std::map<std::wstring, float> seen;
 	size_t end = ws.find_last_not_of(L' ');
 	if (end == std::wstring::npos) return 0;
-	FontFamily fam; font.GetFamily(&fam);
-	wchar_t name[LF_FACESIZE] = L""; fam.GetFamilyName(name);
 	wchar_t head[96]; swprintf(head, 96, L"%s|%.2f|%d|", name, font.GetSize(), font.GetStyle());
 	std::wstring key = head + ws.substr(0, end + 1);
 	auto it = seen.find(key);
@@ -3370,7 +3636,8 @@ static void FitText(Graphics &gr, const std::string &s, const FontFamily &fam, f
 		return;
 	}
 	// drawn the way it was measured (plain DrawString lays hinted text out a little wider than it measures)
-	float ink = InkReach(ws, font), k = ink > room ? room / ink : 1;
+	wchar_t fname[LF_FACESIZE] = L""; fam.GetFamilyName(fname);
+	float ink = InkReach(ws, font, fname), k = ink > room ? room / ink : 1;
 	float sx = k, sy = std::min(1.f, k / 0.72f), used = ink * k;      // past 72% it gets shorter too
 	float left = w <= 0 || align == StringAlignmentNear ? x + pad
 	           : align == StringAlignmentCenter ? x + (w - used) / 2 : x + w - pad - used;
@@ -3387,6 +3654,7 @@ static void Text(Graphics &gr, const std::string &s, float x, float y, float siz
 static void DrawRun(Graphics &gr, const std::vector<std::pair<std::string, Color>> &run, const FontFamily &fam, float size, int style,
                     float x, float y, float maxW) {
 	Font font(&fam, size, style, UnitPixel);
+	wchar_t fname[LF_FACESIZE] = L""; fam.GetFamilyName(fname);
 	std::vector<std::wstring> ws;
 	std::vector<float> adv;                 // each piece's letters, then its trailing spaces
 	float total = 0;
@@ -3395,10 +3663,10 @@ static void DrawRun(Graphics &gr, const std::vector<std::pair<std::string, Color
 		size_t end = ws.back().find_last_not_of(L' ');
 		float spaces = end == std::wstring::npos ? InkWidth(gr, ws.back(), font)
 		             : end + 1 < ws.back().size() ? InkWidth(gr, ws.back().substr(end + 1), font) : 0;
-		adv.push_back(InkReach(ws.back(), font) + spaces);
+		adv.push_back(InkReach(ws.back(), font, fname) + spaces);
 	}
 	for (size_t i = 0; i + 1 < adv.size(); i++) total += adv[i];
-	if (!ws.empty()) total += InkReach(ws.back(), font);
+	if (!ws.empty()) total += InkReach(ws.back(), font, fname);
 	float room = maxW;
 	float k = total > room && total > 0 ? std::max(0.f, room) / total : 1, sx = k, sy = std::min(1.f, k / 0.72f);
 	for (size_t i = 0; i < run.size(); i++) {
@@ -3428,31 +3696,54 @@ static void AddDelta(Fact &f, int from, int to) {
 	if (d) f.parts.push_back({ (d > 0 ? "  +" : "  -") + std::to_string(abs(d)), Color(d > 0 ? 0xFF3CC86E : 0xFFEB463C) });
 	else f.parts.push_back({ "  EVEN", Color(0xFFAAB0BE) });
 }
+// The place the overlays show: where the car runs on track right now, relative to the cars round it (overlay_live_positions;
+// off = the official order, which only changes at the line). A new place has to hold 0.7 s before it shows, so two cars
+// side by side don't swap every frame.
+static int LivePos(int i) {
+	if (i < 0 || i >= NUM_SLOTS) return 0;
+	const Car &c = g_car[i];
+	if (!S.overlayLivePos || c.pos <= 0) return c.spos;
+	struct Hold { int shown = 0, cand = 0; double since = 0; };
+	static Hold h[NUM_SLOTS];
+	Hold &k = h[i];
+	double now = Now();
+	if (k.shown <= 0 || now < k.since - 1) { k.shown = k.cand = c.pos; k.since = now; return k.shown; }
+	if (c.pos == k.shown) { k.cand = c.pos; k.since = now; }
+	else if (c.pos != k.cand) { k.cand = c.pos; k.since = now; }
+	else if (now - k.since >= 0.7) { k.shown = c.pos; k.since = now; }
+	return k.shown;
+}
+
+// The race story under the tag, one fixed order: started, since the restart, stages, last stop, laps led. The strip's
+// plate is the car's place right now; each fact starts with its own small title.
 static std::vector<Fact> StoryFacts(int i) {
 	std::vector<Fact> out;
 	const Color W(0xFFFFFFFF), G(0xFFAAB0BE);
 	if (i < 0) {           // sample for edit mode
-		Fact a{ "RACE", { { "STARTED 14TH   RUNNING 3RD", W } } }; AddDelta(a, 14, 3); out.push_back(a);
+		Fact a{ "P3", { { "STARTED ", G }, { "14TH", W } } }; AddDelta(a, 14, 3); out.push_back(a);
 		return out;
 	}
 	const Car &c = g_car[i];
+	int now = LivePos(i);
+	std::string plate = "P" + std::to_string(now);
 	if (c.startPos > 0) {
-		Fact f{ "RACE", { { "STARTED " + Ordinal(c.startPos) + "   RUNNING " + Ordinal(c.spos), W } } };
-		AddDelta(f, c.startPos, c.spos); out.push_back(f);
+		Fact f{ plate, { { "STARTED ", G }, { Ordinal(c.startPos), W } } };
+		AddDelta(f, c.startPos, now); out.push_back(f);
 	}
 	if (c.restartPos > 0 && g_greens >= 2) {
-		Fact f{ "SINCE RESTART", { { "RESTARTED " + Ordinal(c.restartPos) + "   NOW " + Ordinal(c.spos), W } } };
-		AddDelta(f, c.restartPos, c.spos); out.push_back(f);
+		Fact f{ plate, { { "RESTARTED ", G }, { Ordinal(c.restartPos), W } } };
+		AddDelta(f, c.restartPos, now); out.push_back(f);
 	}
-	Fact st{ "STAGES", {} };
+	Fact st{ plate, {} };
 	for (size_t s = 0; s < S.stageLaps.size() && s < 8; s++)
 		if (c.stagePos[s]) {
-			st.parts.push_back({ (st.parts.empty() ? "" : "     ") + std::string("S") + std::to_string(s + 1) + " ", G });
+			if (st.parts.empty()) st.parts.push_back({ "STAGES   ", G });
+			st.parts.push_back({ (st.parts.size() > 1 ? "     " : "") + std::string("S") + std::to_string(s + 1) + " ", G });
 			st.parts.push_back({ Ordinal(c.stagePos[s]), W });
 		}
 	if (!st.parts.empty()) out.push_back(st);
 	if (c.pits > 0 && c.pitPhase == 0) {
-		Fact f{ "LAST PIT", { { "LAP " + std::to_string(c.pitLap), W } } };
+		Fact f{ plate, { { "LAST PIT   ", G }, { "LAP " + std::to_string(c.pitLap), W } } };
 		if (c.pitStall > 1) { char b[32]; snprintf(b, sizeof b, "   %.1fs STOP", c.pitStall); f.parts.push_back({ b, W }); }
 		if (c.pitInPos && c.pitOutPos) {
 			f.parts.push_back({ "   IN " + Ordinal(c.pitInPos) + "  OUT " + Ordinal(c.pitOutPos), G });
@@ -3460,8 +3751,51 @@ static std::vector<Fact> StoryFacts(int i) {
 		f.parts.push_back({ "   " + std::to_string(c.pits) + (c.pits == 1 ? " STOP" : " STOPS"), G });
 		out.push_back(f);
 	}
-	if (c.lapsLed > 0) out.push_back({ "LAPS LED", { { std::to_string(c.lapsLed) + (c.lapsLed == 1 ? " LAP" : " LAPS"), W } } });
+	if (c.lapsLed > 0) out.push_back({ plate, { { "LAPS LED   ", G }, { std::to_string(c.lapsLed) + (c.lapsLed == 1 ? " LAP" : " LAPS"), W } } });
+	if (out.empty()) out.push_back({ plate, { { "RUNNING ", G }, { Ordinal(now), W } } });
 	return out;
+}
+
+// "in battle with Johnson for 3rd": the cars within passing range of the car on screen (up to 3 drivers in all: a car at
+// the bumper or alongside counts), read from the live order each time it is drawn, so it never names the car itself nor
+// says something that has gone stale. A car that is in range stays in until the gap is 1.4 times the limit.
+static std::string BattleLine(int car) {
+	if (car < 0 || car >= NUM_SLOTS || !g_car[car].valid) return "";
+	static int forCar = -1;
+	static std::vector<int> held;
+	if (forCar != car) { forCar = car; held.clear(); }
+	bool shortTrack = g_trackLen > 0 && g_trackLen < S.shortTrackM;
+	double v = std::max(g_car[car].speed, 10.0f);
+	std::vector<std::pair<double, int>> inRange;
+	for (int j : g_order) {
+		if (j == car || !g_car[j].valid || g_car[j].pit || !SameLap(car, j)) continue;
+		double d = fabs(Ahead(j, car));
+		double lim = shortTrack ? S.battleShortM : std::max(6.0, S.battleGap * v);
+		bool was = std::find(held.begin(), held.end(), j) != held.end();
+		if (d <= lim * (was ? 1.4 : 1.0)) inRange.push_back({ d - (j == g_shot.other ? 3.0 : 0.0), j });
+	}
+	std::sort(inRange.begin(), inRange.end());
+	if (inRange.size() > 2) inRange.resize(2);
+	held.clear();
+	if (inRange.empty()) return "";
+	int best = LivePos(car);
+	std::string who;
+	for (size_t k = 0; k < inRange.size(); k++) {
+		int j = inRange[k].second; held.push_back(j);
+		best = std::min(best, LivePos(j));
+		who += (k ? (k + 1 == inRange.size() ? " and " : ", ") : "") + Short(j);
+	}
+	std::string place = best <= 1 ? "the lead" : Ordinal(best);
+	for (auto &ch : place) ch = (char)tolower((unsigned char)ch);
+	return "in battle with " + who + " for " + place;
+}
+// the line under the driver's name: the battle as it is now, "REPLAY" in a replay, else what the director said at the cut
+static std::string ShotSub(bool sample) {
+	if (sample) return "in battle with Johnson for 3rd";
+	if (OvReplay()) return "REPLAY";
+	if (g_shot.kind == kBattle || g_shot.kind == kPass) return BattleLine(g_shot.car);
+	if (g_shot.kind == kLeader) return g_shot.why;
+	return "";
 }
 
 static void DrawStory(Graphics &gr, bool sample) {
@@ -3474,34 +3808,56 @@ static void DrawStory(Graphics &gr, bool sample) {
 	SolidBrush bg(C(225, 24, 27, 36)), acc(ACCENT);
 	FillRound(gr, bg, 12, 98, 536, 26, 6);
 	gr.FillRectangle(&acc, 12.f, 98.f, 4.f, 26.f);
-	float lab = std::max(100.f, std::min(200.f, TextWidth(gr, f.label, 13) + 14));
-	Text(gr, f.label, 24, 102, 13, ACCENT, true, StringAlignmentNear, 0, lab - 6);
+	float lab = std::max(44.f, std::min(120.f, TextWidth(gr, f.label, 14) + 14));      // the plate: the car's place now
+	Text(gr, f.label, 24, 102, 14, ACCENT, true, StringAlignmentNear, 0, lab - 6);
 	FontFamily fam(L"Segoe UI");
 	DrawRun(gr, f.parts, fam, 13, FontStyleBold, 24 + lab + 13 / 6.f, 102, 548 - 10 - (24 + lab));
+}
+
+// The driver photo in a w x h box, cropped in (headshot_zoom) on the head and upper body, with the number card on an offset
+// fill across the bottom of it. Returns the width used.
+static float DrawPortrait(Graphics &gr, int number, float x, float y, float w, float h, float offset, Color fill, const wchar_t *dashFont) {
+	Image *head = Headshot(number);
+	if (head) {
+		float iw = (float)head->GetWidth(), ih = (float)head->GetHeight(), aspect = w / h;
+		float sw = std::min(iw, ih * aspect) / (float)S.headshotZoom, sh = sw / aspect;
+		float sx = (iw - sw) / 2, sy = std::min(ih * 0.03f, std::max(0.f, ih - sh));       // top of the picture: the head stays in
+		GraphicsState st = gr.Save();
+		gr.SetClip(RectF(x, y, w, h));
+		gr.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+		gr.DrawImage(head, RectF(x, y, w, h), sx, sy, sw, sh, UnitPixel);
+		gr.Restore(st);
+	}
+	float ph = h * 0.30f, py = y + h - ph;                                 // the offset fill: sticks out to the left of the photo
+	SolidBrush plate(fill);
+	gr.FillRectangle(&plate, x - offset, py, w + offset, ph);
+	Image *card = NumberArt(number);
+	if (card) DrawFit(gr, card, x - offset + 4, py + 2, w + offset - 8, ph - 4);
+	else if (dashFont) { FontFamily fam(dashFont); FitText(gr, NumLabel(number), fam, ph, FontStyleBold | FontStyleItalic, ACCENT, x - offset, py - 2, StringAlignmentCenter, w + offset, 0); }
+	else Text(gr, "#" + NumLabel(number), x - offset, py + 1, ph * 0.8f, ACCENT, true, StringAlignmentCenter, w + offset);
+	return w;
 }
 
 static void DrawTag(Graphics &gr, bool sample) {
 	int i = sample ? -1 : OvCar();
 	int number = sample ? 24 : g_car[i].number;
-	std::string pos = sample ? "P3" : "P" + std::to_string(g_car[i].spos);
+	std::string pos = sample ? "P3" : "P" + std::to_string(LivePos(i));
 	std::string name = sample ? "JEFF GORDON" : g_car[i].first + " " + g_car[i].last;
 	for (auto &ch : name) ch = (char)toupper((unsigned char)ch);
-	std::string sub = sample ? "0.31s closing on Johnson" : OvReplay() ? "REPLAY"
-	                         : (g_shot.kind == kBattle || g_shot.kind == kPass || g_shot.kind == kLeader) ? g_shot.why : "";
+	std::string sub = ShotSub(sample);
 	auto col = g_colors.find(NumKey(number));
 	SolidBrush bg(BG), acc(ACCENT), stripe(col != g_colors.end() ? col->second : ACCENT);
 	FillRound(gr, bg, 0, 0, 560, 96, 10);
 	FillRound(gr, acc, 0, 0, 96, 96, 10);
 	gr.FillRectangle(&stripe, 96.f, 90.f, 464.f, 6.f);              // driver colour
 	Text(gr, pos, 0, 18, 44, C(255, 20, 20, 20), true, StringAlignmentCenter, 96);
-	float x = 104;
-	Image *head = Headshot(number);
-	if (head) x += DrawFit(gr, head, x, 2, 84, 88) + 8;
-	Image *card = NumberArt(number);
-	if (card) DrawFit(gr, card, x, 6, 80, 30);
-	else Text(gr, "#" + NumLabel(number), x, 6, 22, ACCENT, true, StringAlignmentNear, 0, 110);
-	Text(gr, name, x - 2, 36, 28, WHITE, true, StringAlignmentNear, 0, 556 - (x - 2));
-	Text(gr, sub, x, 68, 14, GREY, false, StringAlignmentNear, 0, 552 - x);
+	float x = 112;
+	x += DrawPortrait(gr, number, x, 2, 82, 88, 8, C(235, 10, 12, 16), nullptr) + 12;
+	Text(gr, name, x - 2, 14, 30, WHITE, true, StringAlignmentNear, 0, 556 - (x - 2));
+	if (!sub.empty()) {                                              // "RACE" leads the line about what he is doing
+		FontFamily fam(L"Segoe UI");
+		DrawRun(gr, { { "RACE   ", ACCENT }, { sub, GREY } }, fam, 15, FontStyleBold, x, 54, 552 - x);
+	}
 	DrawStory(gr, sample);
 }
 
@@ -3533,7 +3889,7 @@ static void BattleOrder(int a, int b, int &top, int &bottom, double &slide) {
 	double now = Now();
 	if (std::min(a, b) != ka || std::max(a, b) != kb) {         // a new pair: the better placed car on top
 		ka = std::min(a, b); kb = std::max(a, b);
-		shown = g_car[a].spos <= g_car[b].spos ? a : b;
+		shown = Ahead(a, b) >= 0 ? a : b;                     // the car ahead on track
 		since = swapAt = -1;
 	}
 	int other = shown == a ? b : a;
@@ -3563,9 +3919,9 @@ static void DrawBattle(Graphics &gr, bool sample) {
 	float yTop = 30, yBottom = 64;
 	SlideRows(slide, 30, 64, yTop, yBottom);
 	// official neighbours: the one ahead on track right now holds the better position
-	int hi = sample ? 2 : std::min(g_car[a].spos, g_car[b].spos);
-	bool neighbours = !sample && abs(g_car[a].spos - g_car[b].spos) == 1;
-	auto livePos = [&](int slot) { return neighbours ? (slot == top ? hi : hi + 1) : g_car[slot].spos; };
+	// places are where the two run on track now (relative), so a pair with a car between them never reads as one place apart
+	int hi = sample ? 2 : std::min(LivePos(a), LivePos(b));
+	auto livePos = [&](int slot) { return LivePos(slot); };
 	std::string title = (g_shot.kind == kPass && !sample ? "PASS FOR P" : "BATTLE FOR P") + std::to_string(hi);
 	Text(gr, title, 14, 6, 14, ACCENT, true, StringAlignmentNear, 0, 392);
 	auto row = [&](float y, int slot, const char *spos, const char *snum, const char *sname) {
@@ -3583,9 +3939,7 @@ static void DrawBattle(Graphics &gr, bool sample) {
 	double gap = 0.31, metres = 24;
 	if (!sample) PairGap(top, bottom, gap, metres);
 	char g[32]; snprintf(g, sizeof g, "%.2fs", gap);
-	Text(gr, g, 300, 34, 26, WHITE, true, StringAlignmentFar, 110);
-	snprintf(g, sizeof g, "%.0f m", metres);
-	Text(gr, g, 300, 68, 13, GREY, false, StringAlignmentFar, 110);
+	Text(gr, g, 300, 47, 28, WHITE, true, StringAlignmentFar, 110);
 }
 
 static void DrawOnboard(Graphics &gr, bool sample) {
@@ -3593,7 +3947,7 @@ static void DrawOnboard(Graphics &gr, bool sample) {
 	// speed from the car's velocity, like the dash (the car record's speed value reads about 1.3 times too high)
 	float mph = sample ? 182 : OvReplay() ? OvRec(i, REC_MPH) / 1.30f : g_car[i].speed * 2.23694f;
 	float rpm = sample ? 8650 : OvRec(i, REC_RPM);
-	float thr = sample ? 0.9f : OvRec(i, REC_THROTTLE);
+	float thr = sample ? 0.9f : OvReplay() ? OvRec(i, REC_THROTTLE) : g_car[i].thr;
 	SolidBrush bg(BG), acc(ACCENT), dark(C(255, 50, 54, 64)), grn(GREEN);
 	FillRound(gr, bg, 0, 0, 300, 120, 10);
 	char s[32];
@@ -3625,7 +3979,8 @@ static std::string Ordinal(int n) {
 	return std::to_string(n) + suf;
 }
 
-static bool DashLook() { return _stricmp(S.overlayStyle.c_str(), "dash") == 0; }
+static bool StyleIsDash();                       // (racevision_layout.cpp: a style preset says which look it builds on)
+static bool DashLook() { return StyleIsDash(); }
 // the car the dash panel being drawn is about (its colour from the art when dash_art_colors is on)
 static const int NO_CAR_COLOR = -100000;
 static int g_accentNum = NO_CAR_COLOR;
@@ -3717,26 +4072,23 @@ static void DrawStoryDash(Graphics &gr, bool sample, float w) {
 // driver tag, dash look: place block with the headshot, names, number card, why we are here
 static void DrawTagDash(Graphics &gr, bool sample) {
 	int i = sample ? -1 : OvCar();
-	int number = sample ? 24 : g_car[i].number, place = sample ? 3 : g_car[i].spos;
+	int number = sample ? 24 : g_car[i].number, place = sample ? 3 : LivePos(i);
 	std::string first = sample ? "Jeff" : g_car[i].first, last = sample ? "Gordon" : g_car[i].last;
 	for (auto &ch : first) ch = (char)toupper((unsigned char)ch);
 	for (auto &ch : last) ch = (char)toupper((unsigned char)ch);
-	std::string sub = sample ? "0.31s closing on Johnson"
-	                         : (g_shot.kind == kBattle || g_shot.kind == kPass || g_shot.kind == kLeader) ? g_shot.why : "";
+	std::string sub = ShotSub(sample);
 	for (auto &ch : sub) ch = (char)toupper((unsigned char)ch);
 	AccentFor colour(number);
 	DashPanel(gr, 520, 110);
 	DashPlate(gr, 0, 0, 150, 110, 22);
 	DashOrdinal(gr, place, 8, 0, 34, "PLACE");
-	Image *head = Headshot(number);
-	if (head) DrawFit(gr, head, 52, 14, 100, 96);
+	DrawPortrait(gr, number, 56, 14, 96, 96, 14, C(235, 10, 12, 16), g_condensed.c_str());
 	DashText(gr, first, 160, 6, 18, WHITE, true, true, StringAlignmentNear, 0, 352);
 	DashText(gr, last, 156, 24, 36, WHITE, true, true, StringAlignmentNear, 0, 356);
-	Image *card = NumberArt(number);
-	float x = 162;
-	if (card) x += DrawFit(gr, card, x, 72, 56, 30) + 12;
-	else { DashText(gr, NumLabel(number), x, 72, 22, DashAccent(), true, true, StringAlignmentNear, 0, 48); x += 50; }
-	DashText(gr, sub, x, 78, 16, GREY, true, true, StringAlignmentNear, 0, 512 - x);
+	if (!sub.empty()) {                                              // "RACE" leads the line about what he is doing
+		FontFamily fam(g_condensed.c_str());
+		DrawRun(gr, { { "RACE   ", DashAccent() }, { sub, GREY } }, fam, 16, FontStyleBold | FontStyleItalic, 162, 76, 512 - 162);
+	}
 	auto col = g_colors.find(NumKey(number));
 	if (col != g_colors.end()) { SolidBrush st(col->second); gr.FillRectangle(&st, 146.f, 104.f, 371.f, 3.f); }
 	DrawStoryDash(gr, sample, 520);
@@ -3748,9 +4100,8 @@ static void DrawBattleDash(Graphics &gr, bool sample) {
 	int top = a, bottom = b;
 	double slide = 1.0;
 	if (!sample) BattleOrder(a, b, top, bottom, slide);
-	int hi = sample ? 2 : std::min(g_car[a].spos, g_car[b].spos);
-	bool neighbours = !sample && abs(g_car[a].spos - g_car[b].spos) == 1;
-	auto livePos = [&](int slot) { return neighbours ? (slot == top ? hi : hi + 1) : g_car[slot].spos; };
+	int hi = sample ? 2 : std::min(LivePos(a), LivePos(b));
+	auto livePos = [&](int slot) { return LivePos(slot); };
 	float yTop = 38, yBottom = 80;
 	SlideRows(slide, 38, 80, yTop, yBottom);
 	AccentFor colour(sample ? 24 : g_car[b].number);       // the panel: the car on screen; each row's place: its own car
@@ -3776,20 +4127,22 @@ static void DrawBattleDash(Graphics &gr, bool sample) {
 	if (!sample) PairGap(top, bottom, gap, metres);
 	char v[32];
 	snprintf(v, sizeof v, "%.2f", gap);
-	DashText(gr, v, 320, 46, 36, WHITE, true, true, StringAlignmentCenter, 130);
-	snprintf(v, sizeof v, "SEC  |  %.0f M", metres);
-	DashText(gr, v, 320, 90, 14, GREY, true, true, StringAlignmentCenter, 130);
+	DashText(gr, v, 320, 52, 38, WHITE, true, true, StringAlignmentCenter, 130);
+	DashText(gr, "SEC", 320, 96, 14, GREY, true, true, StringAlignmentCenter, 130);
 }
 
 static void DrawDash(Graphics &gr, bool sample) {
 	int i = sample ? -1 : OvCar();
-	int number = sample ? 60 : g_car[i].number, place = sample ? 12 : g_car[i].spos;
+	int number = sample ? 60 : g_car[i].number, place = sample ? 12 : LivePos(i);
 	std::string first = sample ? "Ryan" : g_car[i].first, last = sample ? "Preece" : g_car[i].last;
 	for (auto &ch : first) ch = (char)toupper((unsigned char)ch);
 	for (auto &ch : last) ch = (char)toupper((unsigned char)ch);
 	// speed from the car's velocity (the car record's speed value reads about 1.3 times too high)
 	float mph = sample ? 190 : OvReplay() ? OvRec(i, REC_MPH) / 1.30f : g_car[i].speed * 2.23694f, rpm = sample ? 8275 : OvRec(i, REC_RPM);
 	int gear = sample ? 4 : OvReplay() ? -9 : g_car[i].gear;
+	// pedals: throttle from the car block, brake worked out from the slowing (a replay has only the record's throttle)
+	float thr = sample ? 0.85f : OvReplay() ? OvRec(i, REC_THROTTLE) : g_car[i].thr, brk = sample ? 0.0f : OvReplay() ? 0.f : g_car[i].brk;
+	if (!(thr == thr)) thr = 0;
 	if (mph < 0 || mph > 400) mph = 0;
 	static std::map<int, float> topRpm;                  // highest RPM seen per car = the bar's end
 	float &top = topRpm[sample ? -1 : i];
@@ -3801,19 +4154,15 @@ static void DrawDash(Graphics &gr, bool sample) {
 	DashPanel(gr, 660, 110);
 	DashPlate(gr, 0, 0, 150, 110, 22);          // place block, with the headshot standing in it
 	DashOrdinal(gr, place, 8, 0, 34, "PLACE");
-	Image *head = Headshot(number);
-	if (head) DrawFit(gr, head, 52, 14, 100, 96);
-	// driver: kept clear of the speed arc (its outer edge is at x = 366)
+	DrawPortrait(gr, number, 56, 14, 96, 96, 14, C(235, 10, 12, 16), g_condensed.c_str());
+	// driver: kept clear of the throttle arc (its outer edge is at x = 366)
 	DashText(gr, first, 160, 6, 18, WHITE, true, true, StringAlignmentNear, 0, 200);
 	DashText(gr, last, 156, 24, 36, WHITE, true, true, StringAlignmentNear, 0, 204);
-	Image *card = NumberArt(number);
-	if (card) DrawFit(gr, card, 162, 72, 56, 30);
-	else DashText(gr, NumLabel(number), 162, 72, 22, ACCENT, true, true, StringAlignmentNear, 0, 80);
-	// speed arc: green to yellow, filled to the current speed
+	// throttle arc: green to yellow, filled to the throttle pedal (the number inside is the speed)
 	float cx = 410, cy = 62, r = 38, from = 150, sweep = 240;
 	Pen track(C(255, 52, 56, 64), 12);
 	gr.DrawArc(&track, cx - r, cy - r, r * 2, r * 2, from, sweep);
-	float frac = std::min(1.0f, std::max(0.0f, mph / (float)S.dashSpeedMax));
+	float frac = std::min(1.0f, std::max(0.0f, thr));
 	const int segs = 24;
 	for (int k = 0; k < segs && k < (int)(frac * segs + 0.5f); k++) {
 		float t = k / (float)(segs - 1);
@@ -3822,8 +4171,17 @@ static void DrawDash(Graphics &gr, bool sample) {
 	}
 	char v[32];
 	snprintf(v, sizeof v, "%.0f", mph);
-	DashText(gr, v, cx - 50, cy - 14, 28, WHITE, true, true, StringAlignmentCenter, 100);
-	DashText(gr, "MPH", cx - 50, 88, 14, WHITE, true, true, StringAlignmentCenter, 100);
+	DashText(gr, v, cx - 50, cy - 20, 28, WHITE, true, true, StringAlignmentCenter, 100);
+	{   // brake: a straight bar in the arc's style behind the MPH title, filling red with the brake pedal
+		const int bsegs = 16; float bx = cx - 40, by = 78, bw = 80, bh = 12;
+		int blit = (int)(std::min(1.0f, std::max(0.0f, brk)) * bsegs + 0.5f);
+		for (int k = 0; k < bsegs; k++) {
+			float t = k / (float)(bsegs - 1);
+			SolidBrush sg(k < blit ? C(255, (int)(190 + 45 * t), (int)(50 - 10 * t), 40) : C(255, 52, 56, 64));
+			gr.FillRectangle(&sg, bx + k * (bw / bsegs), by, bw / bsegs - 1.2f, bh);
+		}
+		DashText(gr, "MPH", cx - 50, 74, 14, WHITE, true, true, StringAlignmentCenter, 100);
+	}
 	// RPM: segmented bar
 	const int bars = 12;
 	int lit = (int)(rpm / top * bars + 0.5f);
@@ -3845,8 +4203,12 @@ static void DrawDash(Graphics &gr, bool sample) {
 	DrawStoryDash(gr, sample, 660);
 }
 
+#include "racevision_layout.cpp"
+
+static bool IsCustomPanel(const Panel &p) { return &p >= g_custom && &p < g_custom + 4; }
 static void Render(Panel &p, bool show) {
 	if (!show) { if (p.shown) { ShowWindow(p.hwnd, SW_HIDE); p.shown = false; } return; }
+	if (const Layout *L = LayoutFor(p)) { p.baseW = (int)L->w; p.baseH = (int)L->h; }       // the layout sets the panel's size
 	int w = (int)(p.baseW * p.scale) + 4, h = (int)(p.baseH * p.scale) + 4;
 	HDC screen = GetDC(NULL), mem = CreateCompatibleDC(screen);
 	BITMAPINFO bi = {}; bi.bmiHeader.biSize = sizeof bi.bmiHeader; bi.bmiHeader.biWidth = w; bi.bmiHeader.biHeight = -h;
@@ -3862,7 +4224,8 @@ static void Render(Panel &p, bool show) {
 		gr.Clear(C(0, 0, 0, 0));
 		gr.ScaleTransform(p.scale, p.scale);
 		bool sample = g_edit && (g_shot.car < 0 || !g_car[g_shot.car].valid);
-		if (&p == &g_tag) { if (DashLook() && !OvReplay()) DrawTagDash(gr, sample); else DrawTag(gr, sample); }
+		if (&p != &g_alert && &p != &g_qualBox && LayDrawPanel(gr, p, sample)) {}           // from the panel's layout
+		else if (&p == &g_tag) { if (DashLook() && !OvReplay()) DrawTagDash(gr, sample); else DrawTag(gr, sample); }
 		else if (&p == &g_battle) { if (DashLook()) DrawBattleDash(gr, sample || g_shot.other < 0); else DrawBattle(gr, sample || g_shot.other < 0); }
 		else if (&p == &g_dash) DrawDash(gr, sample);
 		else if (&p == &g_qualBox) DrawQual(gr, sample);
@@ -3926,9 +4289,10 @@ static void SetEdit(bool on) {
 
 // the dash look's panels are a different size
 static void PanelSizes() {
-	bool dash = _stricmp(S.overlayStyle.c_str(), "dash") == 0;
+	bool dash = DashLook();
 	g_tag.baseW = dash ? 520 : 560; g_tag.baseH = dash ? 140 : 126;
 	g_battle.baseW = dash ? 460 : 420; g_battle.baseH = dash ? 130 : 110;
+	LayApplySizes();
 }
 
 static void CreatePanels(HINSTANCE inst) {
@@ -3942,6 +4306,7 @@ static void CreatePanels(HINSTANCE inst) {
 	g_onboard.x = sw - 340; g_onboard.y = sh - 180;
 	g_dash.x = 40; g_dash.y = 30;
 	g_alert.x = sw / 2 - 230; g_alert.y = 30;
+	for (int k = 0; k < 4; k++) { g_custom[k].x = sw / 2 - 200; g_custom[k].y = 120 + k * 80; }
 	for (Panel *p : g_panels) {
 		auto it = S.raw.find(std::string("overlay_") + p->key);
 		if (it != S.raw.end()) {
@@ -3980,16 +4345,20 @@ static double PoleAt(int pole, int poleMs, float d) {
 }
 
 // live delta of `car` against pole (ms, + = slower); false when it isn't on a timed lap
-static bool QualDelta(int car, int &delta) {
-	if (car < 0 || g_ko.board.empty() || !g_game || g_car[car].qLapStart < 0) return false;
+// the same against any car's time `refMs` (its recorded best lap sets the shape of the lap when we saw it)
+static bool QualDeltaVs(int car, int ref, int refMs, int &delta) {
+	if (car < 0 || ref < 0 || ref >= NUM_SLOTS || refMs <= 0 || !g_game || g_car[car].qLapStart < 0) return false;
 	const Car &c = g_car[car];
 	if (g_trackLen > 0 && c.dist < g_trackLen * 0.04f) return false;          // just crossed: too early
-	int pole = g_ko.board[0].first, poleMs = g_ko.board[0].second;
 	int nowMs = (int)(GameSec(*g_game) * 1000);
-	double at = PoleAt(pole, poleMs, c.dist);
+	double at = PoleAt(ref, refMs, c.dist);
 	if (at < 0) return false;
 	delta = (int)((nowMs - c.qLapStart) - at);
 	return true;
+}
+static bool QualDelta(int car, int &delta) {
+	if (g_ko.board.empty()) return false;
+	return QualDeltaVs(car, g_ko.board[0].first, g_ko.board[0].second, delta);
 }
 
 static void DrawQual(Graphics &gr, bool sample) {
@@ -4057,9 +4426,12 @@ static AlertInfo AlertNow() {
 		a.kind = 2; a.title = g_rp.reel ? "HIGHLIGHTS" : "REPLAY";
 		a.line = g_rp.car >= 0 ? "#" + NumLabel(g_car[g_rp.car].number) + " " + Short(g_rp.car) : (c ? CrashWho(*c, 3) : "");
 		if (g_rp.takes.size() > 1) a.line += "  -  angle " + std::to_string(g_rp.take + 1) + " of " + std::to_string(g_rp.takes.size());
-		double left = g_rp.at + g_rp.len - now;
+		double left = g_rp.at + g_rp.len - now, thisAngle = left;
 		for (size_t k = g_rp.take + 1; k < g_rp.takes.size(); k++) left += g_rp.takes[k].len;
-		snprintf(b, sizeof b, g_reel.empty() ? "LIVE IN %d" : "NEXT IN %d", std::max(0, (int)ceil(left)));
+		bool moreAngles = g_rp.take + 1 < (int)g_rp.takes.size();
+		// more angles to come: the count down is to the next angle; on the last one it is to live (or the next highlight)
+		snprintf(b, sizeof b, moreAngles ? "NEXT ANGLE IN %d" : g_reel.empty() ? "LIVE IN %d" : "NEXT IN %d",
+		         std::max(0, (int)ceil(moreAngles ? thisAngle : left)));
 		a.right = b;
 		if (g_tpManual) { a.right = g_rp.speedTxt; a.line = g_rp.car >= 0 ? "#" + NumLabel(g_car[g_rp.car].number) + " " + Short(g_rp.car) : ""; }
 		else if (!g_rp.speedTxt.empty() && g_rp.speedTxt != "PLAY" && g_rp.speedTxt != "LIVE") a.right = g_rp.speedTxt;
@@ -4126,6 +4498,7 @@ static bool OvHold() {
 }
 static void UpdateOverlays() {
 	static int seenCar = -2, seenCam = -2, seenFlag = -2;
+	LayPoll();                                       // a layout file edited by hand is read again
 	if (OvHold()) { OvHideAll(); return; }
 	static bool on = false;
 	static bool tag = false, box = false, gauges = false;
@@ -4133,12 +4506,13 @@ static void UpdateOverlays() {
 	if (OvReplay() && !g_edit) {                     // a replay: the classic tag on its car; in-car angles get the dash
 		bool on = g_overlaysOn && S.replayOverlays && g_car[g_rp.car].valid;
 		bool inCar = on && IsOnboard(g_rp.cam);
-		bool dashStyle = _stricmp(S.overlayStyle.c_str(), "dash") == 0;
+		bool dashStyle = DashLook();
 		Render(g_tag, on && !inCar);
 		Render(g_battle, false);
 		Render(g_onboard, inCar && !dashStyle);
 		Render(g_dash, inCar && dashStyle);
 		Render(g_alert, S.replayBanner);              // it's a replay, not live (user, 2026-10-28)
+		for (Panel &cp : g_custom) Render(cp, LayCustomShow(cp, inCar, false));
 		return;
 	}
 	bool live = g_overlaysOn && g_shot.car >= 0 && g_car[g_shot.car].valid && g_session == SESSION_RACE && !g_rp.phase && !g_youDrive;
@@ -4156,13 +4530,17 @@ static void UpdateOverlays() {
 		if (tag) lastTag = Now();
 	}
 	bool otherOk = g_shot.other >= 0 && g_car[g_shot.other].valid;
-	bool dashStyle = _stricmp(S.overlayStyle.c_str(), "dash") == 0;
+	bool dashStyle = DashLook();
 	bool dash = dashStyle && gauges;                 // on board: the dash replaces the tag and the gauges
 	Render(g_tag, g_edit || (tag && !dash));
 	Render(g_battle, g_edit || (box && otherOk));
 	Render(g_onboard, (g_edit && !dashStyle) || (gauges && !dashStyle));
 	Render(g_dash, (g_edit && dashStyle) || dash);
 	Render(g_alert, g_edit || (S.replayBanner && g_rp.phase) || (g_overlaysOn && g_session == SESSION_RACE && AlertNow().kind != 0));
+	{   // layouts assigned to the custom panels (tickers and the like) show by their own "when"
+		bool onb = IsOnboard(g_lastCam), battleShot = (g_shot.kind == kBattle || g_shot.kind == kPass) && otherOk;
+		for (Panel &cp : g_custom) Render(cp, LayCustomShow(cp, onb, battleShot));
+	}
 	// qualifying in practice: pole + the on-screen car's live delta, redrawn every update
 	ReadKo();
 	bool qual = g_overlaysOn && g_session == SESSION_PRACTICE && g_ko.on && g_shot.car >= 0 &&
@@ -4448,10 +4826,10 @@ int main() {
 		{ "lead_battle_depth", "3" }, { "lead_battle_hold", "120" }, { "lead_battle_pack", "6" },
 		{ "art_folders", S.artFolders }, { "companion_folder", S.companionFolder }, { "art_series", S.artSeries },
 		{ "camera_call", "1" }, { "overlay_style", S.overlayStyle }, { "dash_accent", "#3CC8C8" }, { "dash_accent2", "#145A60" }, { "dash_art_colors", "0" }, { "dash_speed_max", "220" },
-		{ "tag_story", "1" }, { "tag_rotate", "6" }, { "stage_laps", "" },
+		{ "tag_story", "1" }, { "overlay_live_positions", "1" }, { "headshot_zoom", "1.35" }, { "pass_settle", "0.8" }, { "pass_lead_settle", "0.35" }, { "pass_ahead_m", "1" }, { "pass_hold", "1.5" }, { "blowover_m", "4" }, { "blowover_bonus", "8" }, { "tag_rotate", "6" }, { "stage_laps", "" },
 		{ "crowd", "0" }, { "crowd_volume", "0.8" }, { "crowd_folder", "sounds\\crowd" }, { "crowd_favourites", "" },
 		{ "crowd_pass_depth", "10" }, { "crowd_cooldown", "6" }, { "crowd_events", "start, restart, lead, pass, crash, white, win" },
-		{ "overlay_gap", "150" }, { "qual_player_cam", "1" },
+		{ "overlay_gap", "150" }, { "qual_player_cam", "1" }, { "qual_close_ms", "150" }, { "qual_finish_pct", "30" }, { "qual_break_hold", "20" },
 		{ "cam_replay", "19, 20" }, { "replay_auto", "0" }, { "replay_caution_only", "1" }, { "replay_preroll", "4" },
 		{ "replay_after", "8" }, { "replay_max", "20" }, { "replay_within", "120" }, { "live_after_climb_out", "1" },
 		{ "crash_damage", "0.5" }, { "contact_join", "0.05" }, { "crash_span", "20" }, { "custom_cams", "1" }, { "chase2_view", "4.5, -2.2, 1.0, 26, 4" },
@@ -4510,13 +4888,16 @@ int main() {
 		GetImageEncoders(n, size, enc);
 		for (UINT k = 0; k < n; k++) if (wcscmp(enc[k].MimeType, L"image/png") == 0) png = enc[k].Clsid;
 		for (Panel *p : g_panels) {
+			if (IsCustomPanel(*p) && !LayoutFor(*p)) continue;
+			if (const Layout *L = LayoutFor(*p)) { p->baseW = (int)L->w; p->baseH = (int)L->h; }
 			Bitmap bmp(p->baseW + 40, p->baseH + 40, PixelFormat32bppARGB);
 			Graphics gr(&bmp);
 			gr.SetSmoothingMode(SmoothingModeAntiAlias);
 			gr.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
 			gr.Clear(C(255, 70, 90, 110));                      // stand-in for the game picture
 			gr.TranslateTransform(20, 20);
-			if (p == &g_tag) { if (DashLook()) DrawTagDash(gr, true); else DrawTag(gr, true); }
+			if (p != &g_alert && LayDrawPanel(gr, *p, true)) {}
+			else if (p == &g_tag) { if (DashLook()) DrawTagDash(gr, true); else DrawTag(gr, true); }
 			else if (p == &g_battle) { if (DashLook()) DrawBattleDash(gr, true); else DrawBattle(gr, true); }
 			else if (p == &g_dash) DrawDash(gr, true); else if (p == &g_qualBox) DrawQual(gr, true); else DrawOnboard(gr, true);
 			std::string out = std::string("preview_") + p->key + ".png";

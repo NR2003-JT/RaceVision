@@ -405,6 +405,23 @@ static void Serve(SOCKET s, const std::string &ip) {
 	}
 	size_t sp1 = req.find(' '), sp2 = req.find(' ', sp1 + 1);
 	if (sp1 == std::string::npos || sp2 == std::string::npos) return;
+	// a body (the overlay editor's layouts and pictures): by Content-Length, up to 12 MB
+	if (req.find("\r\n\r\n") == std::string::npos) return;
+	std::string body = req.substr(req.find("\r\n\r\n") + 4);
+	{
+		std::string head = req.substr(0, req.find("\r\n\r\n"));
+		for (auto &ch : head) ch = (char)tolower((unsigned char)ch);
+		size_t cl = head.find("content-length:");
+		size_t want = cl == std::string::npos ? 0 : (size_t)strtoul(head.c_str() + cl + 15, NULL, 10);
+		if (want > 12u * 1024 * 1024) return;
+		std::vector<char> big(65536);
+		while (body.size() < want) {
+			int n = recv(s, big.data(), (int)big.size(), 0);
+			if (n <= 0) break;
+			body.append(big.data(), n);
+		}
+		if (body.size() > want) body.resize(want);
+	}
 	std::string method = req.substr(0, sp1), target = req.substr(sp1 + 1, sp2 - sp1 - 1);
 	size_t qm = target.find('?');
 	std::string path = target.substr(0, qm);
@@ -442,6 +459,13 @@ static void Serve(SOCKET s, const std::string &ip) {
 	}
 	if (path == "/director" || path == "/director.html") {        // the director view (racevision_timeline.cpp)
 		Reply(s, 200, "text/html; charset=utf-8", DirectorHtml());
+		return;
+	}
+	if (path == "/overlays" || path == "/overlays.html") {        // the overlay layout editor (racevision_layout.cpp's calls)
+		HRSRC r = FindResourceA(NULL, MAKEINTRESOURCEA(104), (LPCSTR)RT_RCDATA);
+		if (!r) { Reply(s, 200, "text/html; charset=utf-8", "<h1>RaceVision</h1><p>The overlay editor is missing from this build.</p>"); return; }
+		HGLOBAL g = LoadResource(NULL, r);
+		Reply(s, 200, "text/html; charset=utf-8", std::string((const char *)LockResource(g), SizeofResource(NULL, r)));
 		return;
 	}
 	if (path == "/icon.png" || path == "/icon512.png" || path == "/logo.png") {
@@ -551,6 +575,15 @@ static void Serve(SOCKET s, const std::string &ip) {
 			if (code == 200) Reply(s, 200, "audio/wav", body);
 			else Reply(s, 404, JSON, Err("That call is gone."));
 		}
+		return;
+	}
+	if (path == "/api/overlay" || path.rfind("/api/overlay/", 0) == 0) {       // overlay layouts (racevision_layout.cpp)
+		std::string sub = path.size() > 13 ? path.substr(13) : "";
+		bool post = sub == "save" || sub == "delete" || sub == "reset" || sub == "duplicate" || sub == "use" || sub == "upload" || sub == "render" || sub == "stylesave" || sub == "styleuse" || sub == "styledelete";
+		if (post && method != "POST") { Reply(s, 400, JSON, Err("use POST")); return; }
+		int code = 200; std::string ctype;
+		std::string out = LayApi(sub, q, body, code, ctype);
+		Reply(s, code, ctype.c_str(), out);
 		return;
 	}
 	if (method != "POST") { Reply(s, 400, JSON, Err("use POST")); return; }

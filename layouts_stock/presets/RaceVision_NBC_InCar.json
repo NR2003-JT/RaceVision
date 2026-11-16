@@ -1,0 +1,9 @@
+{
+ "title": "RaceVision NBC In-Car",
+ "base": "classic",
+ "layouts": {
+  "tag": "tag_classic",
+  "battle": "battle_classic",
+  "onboard": "RaceVision_NBC_InCar_Bar"
+ }
+}

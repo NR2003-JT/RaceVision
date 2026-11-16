@@ -150,7 +150,60 @@ aside { background: var(--panel); border-left: 1px solid #1e2128; display: flex;
 .rate button { height: 26px; min-width: 38px; border-radius: 7px; background: var(--card2); font-size: 15px; } .rate button:hover { background: #39404d; }
 .dynlbl { color: #ff6ec7; font-weight: 700; }
 
+.picker { padding: 8px 12px 10px; border-bottom: 1px solid var(--line); }
+.picker .lbl { display: flex; align-items: center; gap: 8px; padding: 0 0 6px; }
+.picker .ptabs { margin-left: auto; display: flex; gap: 4px; }
+.picker .pt { height: 22px; padding: 0 9px; border-radius: 6px; background: var(--card); color: var(--muted); font-size: 12px; font-weight: 600; }
+.picker .pt.on { background: var(--card2); color: var(--text); box-shadow: inset 0 0 0 1px var(--gold); }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 5px; max-height: 176px; overflow-y: auto; }
+.pgrid.cams { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.ptile { background: var(--card); border: 1px solid var(--line); border-radius: 6px; height: 32px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  font: 700 13px var(--cond); padding: 0 4px; white-space: nowrap; }
+.ptile:hover { background: var(--card2); }
+.ptile img { max-height: 24px; max-width: 100%; object-fit: contain; }
+.ptile.queued { box-shadow: inset 0 0 0 2px #7fe3a5; } .ptile.on { outline: 2px solid var(--gold); outline-offset: -2px; } .ptile.par { outline: 2px solid var(--teal); outline-offset: -2px; }
+.ptile.cam { justify-content: flex-start; gap: 6px; font-size: 12px; font-weight: 600; } .ptile.cam b { color: var(--gold); min-width: 16px; text-align: right; }
+.ptile.cam span { overflow: hidden; text-overflow: ellipsis; }
+aside { overflow-y: auto; }
+.fold { border-bottom: 1px solid var(--line); }
+.fh { cursor: pointer; user-select: none; padding: 10px 14px; display: flex; align-items: center; gap: 8px; }
+.fh .car { display: inline-block; width: 12px; color: var(--dim); font-size: 11px; transition: transform .12s; }
+.fold.shut > .fh .car { transform: rotate(-90deg); }
+.fold.shut > .fb { display: none; }
+.fold > .fb { padding: 0 12px 10px; }
+.decisions { flex: none; min-height: 0; } #evList { max-height: 300px; }
+.decisions .lbl { padding: 10px 14px; }
+.qtog { margin-left: 6px; height: 22px; padding: 0 9px; border-radius: 6px; background: var(--card2); color: var(--muted); font-size: 12px; font-weight: 700; }
+.qtog.on { background: var(--gold); color: #0c0e12; }
+.sb { height: 26px; padding: 0 11px; border-radius: 6px; background: var(--card2); font-size: 12.5px; font-weight: 700; } .sb.pri { background: var(--gold); color: #0c0e12; }
+.qrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.qauto { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 4px; margin-left: auto; } .qauto input[type=number] { width: 52px; background: var(--input); border: 1px solid var(--line); border-radius: 5px; padding: 2px 4px; }
+#qList { display: flex; flex-direction: column; gap: 4px; }
+.qempty { color: var(--dim); font-size: 12px; }
+.qi { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 4px 6px 4px 8px; font-size: 13px; }
+.qi.first { border-color: var(--gold); } .qi b { font: 700 11px var(--cond); letter-spacing: .6px; color: var(--muted); width: 38px; text-transform: uppercase; }
+.qi span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .qi button { color: var(--muted); width: 22px; height: 22px; border-radius: 5px; } .qi button:hover { background: #333948; color: #fff; }
+.rtabs { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
+#rpList { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.rrow { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; cursor: pointer; text-align: left; font-size: 13px; }
+.rrow:hover { background: var(--card2); } .rrow.tv { border-color: var(--red); } .rrow .k { font: 700 11px var(--cond); letter-spacing: .6px; color: #0c0e12; background: #7a8190; border-radius: 4px; padding: 3px 5px; flex: none; } .rrow .k.w { background: var(--gold); }
+.rrow .nm { flex: 1; min-width: 0; } .rrow .nm small { display: block; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rempty { color: var(--dim); font-size: 12.5px; padding: 6px 2px; }
+.tlh { padding: 7px 12px; } .tlh .r { margin-left: 4px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.tpspeed { margin-left: auto; font: 700 12px var(--cond); letter-spacing: .8px; padding: 3px 8px; border-radius: 5px; background: #39404d; color: #fff; } .tpspeed.live { background: #3a1616; color: #ff8a80; }
+.tpwrap { padding: 4px 12px 6px; border-bottom: 1px solid #1c2027; }
+.tpbar { position: relative; height: 26px; }
+.tpbar input[type=range] { position: absolute; left: 0; right: 0; top: 4px; width: 100%; margin: 0; height: 18px; background: transparent; accent-color: var(--gold); }
+.tpmarks { position: absolute; left: 7px; right: 7px; top: 0; height: 26px; pointer-events: none; }
+.tpmarks i { position: absolute; top: 0; width: 3px; height: 8px; border-radius: 2px; background: #6b7487; margin-left: -1px; } .tpmarks i.c { background: var(--red); } .tpmarks i.h { background: var(--gold); } .tpmarks i.f { background: #3cc8c8; height: 26px; width: 2px; opacity: .5; }
+.tprow { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.tprow .zb.pri { background: var(--gold); color: #0c0e12; }
+.tpsep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+.tplap { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 4px; } .tplap input { width: 56px; background: var(--input); border: 1px solid var(--line); border-radius: 5px; padding: 2px 4px; }
+.tpnote { color: var(--muted); font-size: 12px; margin-left: 6px; }
+#tp.off .tprow button { opacity: .45; }
 @media (max-width: 900px) {
+  .fold[data-fold="drivers"], .fold[data-fold="cams"], .fold[data-fold="queue"], #tp { display: none; }
   body { grid-template-rows: auto auto auto; overflow-y: auto; height: auto; }
   html, body { width: 100%; overflow-x: hidden; }
   header { flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
@@ -176,6 +229,7 @@ aside { background: var(--panel); border-left: 1px solid #1e2128; display: flex;
   <div class="hbtns">
     <button class="hb" id="btnSets">Camera sets</button>
     <button class="hb" id="btnDyn">Dynamic cameras</button>
+    <button class="hb" id="btnOv" title="Build and edit the on-screen overlays: move things, change what data feeds them">Overlays</button>
     <button class="hb" id="btnFiles">Recordings</button>
     <button class="hb" id="btnSet">Settings</button>
   </div>
@@ -201,13 +255,51 @@ aside { background: var(--panel); border-left: 1px solid #1e2128; display: flex;
       <div class="wait" id="oaWait">Holding the cut: a TV camera is about to change on screen.</div>
       <div class="rate" id="oaRate"><span class="dynlbl" id="oaDynLbl"></span><span style="flex:1"></span>How is this angle?<button id="rateUp" title="Good angle - use more like it">&#128077;</button><button id="rateDn" title="Poor angle - use less">&#128078;</button></div>
     </div>
-    <div class="decisions">
-      <div class="lbl">Decisions <span class="r" id="evCount"></span></div>
-      <div id="evList"></div>
+    <div class="fold" data-fold="drivers">
+      <div class="lbl fh"><span class="car">▾</span>Drivers <span class="r" id="drvHint">click = on air</span><button class="qtog" id="qMode" title="Queue mode: clicks add to Up next instead of going on air (Shift-click does the same)">Queue</button></div>
+      <div class="fb"><div class="pgrid" id="pGridCars"></div></div>
+    </div>
+    <div class="fold" data-fold="cams">
+      <div class="lbl fh"><span class="car">▾</span>Cameras <span class="r">click = on air</span></div>
+      <div class="fb"><div class="pgrid cams" id="pGridCams"></div></div>
+    </div>
+    <div class="fold" data-fold="queue">
+      <div class="lbl fh"><span class="car">▾</span>Up next <span class="r" id="qCount"></span></div>
+      <div class="fb">
+        <div class="qrow"><button class="sb pri" id="qTake" title="Put the first queued driver and the first queued camera on air">Take next</button><button class="zb" id="qClear">Clear</button>
+          <label class="qauto"><input type="checkbox" id="qAuto"> every <input type="number" id="qSecs" value="40" min="5" max="600"> s</label></div>
+        <div id="qList"><div class="qempty">Switch on Queue above, then click drivers and cameras to line them up.</div></div>
+      </div>
+    </div>
+    <div class="fold" data-fold="replays">
+      <div class="lbl fh"><span class="car">▾</span>Replays <span class="r" id="rpState"></span></div>
+      <div class="fb">
+        <div class="rtabs"><button class="zb on" data-rt="crash">Wrecks</button><button class="zb" data-rt="high">Highlights</button><button class="zb" data-rt="caut">Cautions</button>
+          <span style="flex:1"></span><button class="zb" id="rpReel" title="Play the highlight reel">&#9654; Reel</button><button class="zb live" id="rpLive">Live</button></div>
+        <div id="rpList"></div>
+      </div>
+    </div>
+    <div class="fold decisions" data-fold="decisions">
+      <div class="lbl fh"><span class="car">▾</span>Decisions <span class="r" id="evCount"></span></div>
+      <div class="fb" id="evBox"><div id="evList"></div></div>
     </div>
   </aside>
 </main>
-<section id="tl">
+<section id="tl" class="fold" data-fold="timeline">
+  <div class="lbl fh tlh"><span class="car">▾</span>Timeline and playback <span class="r" id="tpPos"></span><span class="tpspeed live" id="tpSpeed">LIVE</span></div>
+  <div class="fb">
+  <div class="tpwrap" id="tp">
+    <div class="tpbar"><div class="tpmarks" id="tpMarks"></div><input type="range" id="tpSeek" min="0" max="1000" value="1000"></div>
+    <div class="tprow">
+      <button class="zb" data-tp="start">|&lt; Start</button><button class="zb" data-tp="back">&lt; Frame</button><button class="zb pri" data-tp="toggle" id="tpPlay">Play</button><button class="zb" data-tp="fwd">Frame &gt;</button><button class="zb live" data-tp="live">Live &gt;|</button>
+      <span class="tpsep"></span>
+      <button class="zb" data-tp="rew">&lt;&lt; x2</button><button class="zb" data-tp="slow" data-n="16">1/17</button><button class="zb" data-tp="slow" data-n="7">1/8</button><button class="zb" data-tp="slow" data-n="3">1/4</button><button class="zb" data-tp="slow" data-n="1">1/2</button><button class="zb" data-tp="play">1x</button><button class="zb" data-tp="fast" data-n="2">x2</button><button class="zb" data-tp="fast" data-n="4">x4</button>
+      <span class="tpsep"></span>
+      <button class="zb" data-tp="jump" data-k="C" data-d="-1">&lt; Wreck</button><button class="zb" data-tp="jump" data-k="C" data-d="1">Wreck &gt;</button><button class="zb" data-tp="jump" data-k="H" data-d="-1">&lt; Highlight</button><button class="zb" data-tp="jump" data-k="H" data-d="1">Highlight &gt;</button><button class="zb" data-tp="jump" data-k="L" data-d="-1">&lt; Lap</button><button class="zb" data-tp="jump" data-k="L" data-d="1">Lap &gt;</button>
+      <span class="tpsep"></span><span class="tplap">Lap <input type="number" id="tpLap" min="1"><button class="zb" id="tpGo">Go</button></span>
+      <span class="tpnote" id="tpNote"></span>
+    </div>
+  </div>
   <div class="tlbar">
     <button class="zb" data-w="60">1 min</button><button class="zb on" data-w="300">5 min</button><button class="zb" data-w="900">15 min</button><button class="zb" data-w="3600">1 hr</button><button class="zb" data-w="0">All</button>
     <span class="tlinfo" id="tlInfo">Drag across the timeline to look back - the map follows. Wheel to zoom.</span>
@@ -215,6 +307,7 @@ aside { background: var(--panel); border-left: 1px solid #1e2128; display: flex;
     <button class="zb live on" id="btnLive">LIVE</button>
   </div>
   <canvas id="tlc"></canvas>
+  </div>
 </section>
 <div id="tip"></div>
 <div id="drawer"><div class="dh"><span id="dTitle">Director settings</span><button id="dClose">&times;</button></div><div class="db" id="dBody"></div></div>
@@ -693,8 +786,192 @@ cv.addEventListener("click", async ev => {
 });
 
 // ---------------------------------------------------------------- on air panel
+// ---- panels fold shut with a click on their title (and stay that way); the bottom timeline too
+(function () {
+  let shut; try { shut = JSON.parse(localStorage.getItem("rvDirShut") || "{}"); } catch (e) { shut = {}; }
+  document.querySelectorAll(".fold").forEach(f => {
+    const k = f.dataset.fold;
+    if (shut[k]) f.classList.add("shut");
+    f.querySelector(".fh").addEventListener("click", ev => {
+      if (ev.target.closest("button,input,label,select")) return;
+      f.classList.toggle("shut"); shut[k] = f.classList.contains("shut");
+      try { localStorage.setItem("rvDirShut", JSON.stringify(shut)); } catch (e) {}
+      if (k === "timeline") window.dispatchEvent(new Event("resize"));
+      if (k === "replays") replaysPoll();
+      if (k === "timeline") tpPoll();
+    });
+  });
+})();
+const isShut = k => { const f = document.querySelector('.fold[data-fold="' + k + '"]'); return !f || f.classList.contains("shut"); };
+
+// ---- the drivers and cameras panels (wide screens): the cars in a fixed order (their slot in the game, so the table never
+// jumps as the running order changes) as number cards, and the cameras; click one to put it on air, or line it up in Up next
+let pickCams = [];
+let Q = []; try { Q = JSON.parse(localStorage.getItem("rvDirQ") || "[]"); } catch (e) { Q = []; }
+const saveQ = () => { try { localStorage.setItem("rvDirQ", JSON.stringify(Q)); } catch (e) {} };
+let qMode = false;
+async function loadPickCams() { try { const S = await apiJ("state"); pickCams = (S.cams || []).filter(c => !c.hidden); renderPicker.sig = ""; } catch (e) {} }
+const carLabel = sl => { const i = st.cars[sl]; return i ? "#" + i.num + " " + (i.name || "") : "car " + sl; };
+const camLabel = n => { const c = pickCams.find(x => x.n === n); return "Camera " + n + (c ? " " + c.name : ""); };
+function renderPicker() {
+  const L = st.live, on = L ? L.car : -1, oth = L ? L.other : -1, cam = L ? L.cam : -1;
+  const slots = Object.keys(st.cars).map(Number).sort((a, b) => a - b);
+  const sig = [on, oth, cam, SERIES, slots.join(","), pickCams.length, Q.map(q => q.t + q.id).join(",")].join("|");
+  if (renderPicker.sig === sig) return;
+  renderPicker.sig = sig;
+  const inQ = (t, id) => Q.some(q => q.t === t && q.id === id);
+  $("pGridCars").innerHTML = slots.map(sl => {
+    const i = st.cars[sl], n = String(i.num);
+    const img = /^\d{1,4}$/.test(n) && SERIES ? '<img src="' + artUrl("num", n) + '" alt="" onerror="this.replaceWith(document.createTextNode(\'#' + esc(n) + '\'))">' : "#" + esc(n);
+    return '<button class="ptile' + (sl === on ? " on" : sl === oth ? " par" : "") + (inQ("car", sl) ? " queued" : "") + '" data-slot="' + sl + '" title="' + esc("#" + n + " " + (i.name || "")) + '">' + img + "</button>";
+  }).join("") || '<span style="color:var(--dim);font-size:12px">No cars yet.</span>';
+  $("pGridCams").innerHTML = pickCams.map(c => '<button class="ptile cam' + (c.n === cam ? " on" : "") + (inQ("cam", c.n) ? " queued" : "") + '" data-cam="' + c.n + '" title="' + esc(c.name) + '"><b>' + c.n + "</b><span>" + esc(c.name) + "</span></button>").join("")
+    || '<span style="color:var(--dim);font-size:12px">No cameras listed.</span>';
+  renderQueue();
+}
+async function putOnAir(kind, id) {
+  try {
+    if (kind === "car") { await api("focus", { slot: id }); toast("On air: " + carLabel(id) + " (the director waits a while)"); }
+    else { await api("cam", { c: id }); toast("Camera " + id); }
+  } catch (e) { toast(e.message); }
+}
+function pickClick(ev) {
+  const t = ev.target.closest(".ptile"); if (!t || st.mode !== "live") return;
+  const kind = t.dataset.slot != null ? "car" : "cam", id = +(kind === "car" ? t.dataset.slot : t.dataset.cam);
+  if (qMode || ev.shiftKey) {
+    const at = Q.findIndex(q => q.t === kind && q.id === id);
+    if (at >= 0) Q.splice(at, 1); else Q.push({ t: kind, id });
+    saveQ(); renderPicker.sig = ""; renderPicker();
+  } else putOnAir(kind, id);
+}
+$("pGridCars").addEventListener("click", pickClick); $("pGridCams").addEventListener("click", pickClick);
+$("qMode").addEventListener("click", () => { qMode = !qMode; $("qMode").classList.toggle("on", qMode); $("drvHint").textContent = qMode ? "click = add to Up next" : "click = on air"; });
+
+// ---- Up next: line up drivers and cameras, then take them on air (the first driver and the first camera together),
+// by hand or every N seconds. Kept in this browser; it only runs while this page is open.
+function renderQueue() {
+  const l = $("qList");
+  $("qCount").textContent = Q.length ? Q.length + " queued" : "";
+  if (!Q.length) { l.innerHTML = '<div class="qempty">Switch on Queue above, then click drivers and cameras to line them up. Shift-click adds one without switching it on.</div>'; return; }
+  const firstCar = Q.findIndex(q => q.t === "car"), firstCam = Q.findIndex(q => q.t === "cam");
+  l.innerHTML = Q.map((q, i) => '<div class="qi' + (i === firstCar || i === firstCam ? " first" : "") + '"><b>' + (q.t === "car" ? "Driver" : "Cam") + "</b><span>" + esc(q.t === "car" ? carLabel(q.id) : camLabel(q.id)) +
+    '</span><button data-qu="' + i + '" title="Move up">&#9650;</button><button data-qx="' + i + '" title="Remove">&times;</button></div>').join("");
+}
+$("qList").addEventListener("click", ev => {
+  const u = ev.target.closest("[data-qu]"), x = ev.target.closest("[data-qx]");
+  if (u) { const i = +u.dataset.qu; if (i > 0) { [Q[i - 1], Q[i]] = [Q[i], Q[i - 1]]; } }
+  else if (x) Q.splice(+x.dataset.qx, 1); else return;
+  saveQ(); renderPicker.sig = ""; renderPicker();
+});
+async function takeNext() {
+  if (st.mode !== "live") return;
+  const ci = Q.findIndex(q => q.t === "car"), mi = Q.findIndex(q => q.t === "cam");
+  if (ci < 0 && mi < 0) { toast("Nothing in Up next."); return; }
+  const car = ci >= 0 ? Q[ci] : null, cam = mi >= 0 ? Q[mi] : null;
+  Q = Q.filter(q => q !== car && q !== cam); saveQ();
+  if (car) await putOnAir("car", car.id);
+  if (cam) await putOnAir("cam", cam.id);
+  renderPicker.sig = ""; renderPicker();
+}
+$("qTake").addEventListener("click", takeNext);
+$("qClear").addEventListener("click", () => { Q = []; saveQ(); renderPicker.sig = ""; renderPicker(); });
+let qLeft = 0;
+setInterval(() => {
+  if (!$("qAuto").checked || !Q.length || st.mode !== "live") { qLeft = 0; return; }
+  const secs = Math.max(5, +$("qSecs").value || 40);
+  if (qLeft <= 0) qLeft = secs;
+  if (--qLeft <= 0) takeNext();
+}, 1000);
+
+// ---- playback: NR2003's own replay controls (scrub, frame step, slow motion, laps, wrecks, highlights), as on the phone page
+let TP = null, tpDrag = false, tpMarksKey = "";
+const tpTime = (f, rate) => { const sec = Math.max(0, Math.round(f / (rate || 36))); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); };
+async function tpSend(args) { try { await apiPost("tape/ctl", args); setTimeout(tpPoll, 250); } catch (e) { toast(e.message); } }
+async function tpPoll() {
+  clearTimeout(tpPoll.t);
+  if (st.mode !== "live") { tpPoll.t = setTimeout(tpPoll, 3000); return; }
+  try {
+    TP = await apiJ("tape");
+    const t = TP, live = t.mode !== 1;
+    $("tpSpeed").textContent = t.speed; $("tpSpeed").className = "tpspeed" + (live ? " live" : "");
+    $("tp").className = "tpwrap" + (t.can || !live ? "" : " off");
+    if (t.frames > 0) {
+      let lap = "";
+      for (const m of t.marks) if (m.t === "L" && m.f <= t.idx) lap = m.l;
+      $("tpPos").textContent = live ? tpTime(t.frames, t.rate) + " of race recorded" : tpTime(t.idx, t.rate) + " / " + tpTime(t.frames, t.rate) + (lap ? "  -  " + lap : "");
+      if (!tpDrag) $("tpSeek").value = live ? 1000 : Math.round(1000 * t.idx / Math.max(1, t.frames - 1));
+      const key = t.frames + ":" + t.marks.length;
+      if (key !== tpMarksKey) {
+        tpMarksKey = key;
+        $("tpMarks").innerHTML = t.marks.filter(m => m.t !== "L").map(m => '<i class="' + (m.t === "C" ? "c" : m.t === "H" ? "h" : m.t === "F" ? "f" : "") + '" style="left:' + (100 * m.f / Math.max(1, t.frames - 1)).toFixed(2) + '%" title="' + esc(m.l) + '"></i>').join("");
+        if (!isShut("replays")) renderReplays();
+      }
+    } else $("tpPos").textContent = "";
+    $("tpPlay").textContent = !live && t.step !== 0 ? "Pause" : "Play";
+    $("tpNote").textContent = t.msg || (!t.can && live ? t.why : "");
+  } catch (e) {}
+  tpPoll.t = setTimeout(tpPoll, document.hidden ? 4000 : isShut("timeline") ? 3000 : 500);
+}
+$("tp").addEventListener("click", e => {
+  const b = e.target.closest("[data-tp]"); if (!b) return;
+  const k = b.dataset.tp;
+  if (k === "start") tpSend({ do: "start" });
+  else if (k === "back") tpSend({ do: "step", d: -1 });
+  else if (k === "fwd") tpSend({ do: "step", d: 1 });
+  else if (k === "toggle") tpSend({ do: TP && TP.mode === 1 && TP.step !== 0 ? "pause" : "play" });
+  else if (k === "live") tpSend({ do: "live" });
+  else if (k === "play") tpSend({ do: "play" });
+  else if (k === "slow") tpSend({ do: "slow", n: b.dataset.n });
+  else if (k === "fast") tpSend({ do: "fast", n: b.dataset.n });
+  else if (k === "rew") tpSend({ do: "fast", n: 2, rev: 1 });
+  else if (k === "jump") tpSend({ do: "jump", kind: b.dataset.k, d: b.dataset.d });
+});
+$("tpSeek").addEventListener("input", e => { tpDrag = true; if (TP && TP.frames > 0) $("tpPos").textContent = tpTime(e.target.value / 1000 * TP.frames, TP.rate) + " / " + tpTime(TP.frames, TP.rate); });
+$("tpSeek").addEventListener("change", e => { tpDrag = false; tpSend({ do: "seek", f: (e.target.value / 1000).toFixed(4) }); });
+$("tpGo").onclick = () => { const n = parseInt($("tpLap").value, 10); if (n > 0) tpSend({ do: "lap", n }); };
+
+// ---- replays: wrecks and highlights logged this race (click = replay it), the highlight reel, the cautions from the tape
+let RP = null, rpTab = "crash", rpSig = "";
+async function replaysPoll() {
+  clearTimeout(replaysPoll.t);
+  if (st.mode === "live" && !isShut("replays")) {
+    try { const r = await apiJ("replays"); const key = JSON.stringify(r); if (key !== rpSig) { rpSig = key; RP = r; renderReplays(); } } catch (e) {}
+  }
+  replaysPoll.t = setTimeout(replaysPoll, document.hidden ? 5000 : 1500);
+}
+function renderReplays() {
+  const box = $("rpList"); if (!box) return;
+  const ago = sec => sec < 90 ? Math.round(sec) + "s ago" : Math.round(sec / 60) + " min ago";
+  const isCrash = c => !c.kind || c.kind === "crash";
+  let html = "";
+  if (rpTab === "caut") {
+    const marks = TP ? TP.marks.filter(m => m.t === "F" && m.l === "CAUTION") : [];
+    html = marks.length ? marks.slice().reverse().map(m => '<div class="rrow" data-seek="' + m.f + '"><span class="k">CAUTION</span><span class="nm">' + esc(tpTime(m.f, TP.rate)) + ' into the race<small>click to jump the replay there</small></span></div>').join("")
+      : '<div class="rempty">No cautions on the tape yet.</div>';
+  } else if (RP) {
+    const list = RP.crashes.filter(c => rpTab === "crash" ? isCrash(c) : !isCrash(c));
+    html = list.length ? list.map(c => '<div class="rrow' + (RP.playing === c.id ? " tv" : "") + '" data-crash="' + c.id + '"><span class="k' + (c.worthy ? " w" : "") + '">LAP ' + (c.lap + 1) + '</span><span class="nm">' + esc(c.who) +
+      "<small>" + (isCrash(c) ? c.cars + " car" + (c.cars === 1 ? "" : "s") + "  ·  damage " + c.damage.toFixed(2) : esc(c.what)) + "  ·  " + ago(c.ago) + (c.replayed ? "  ·  shown" : "") + "</small></span>" + (RP.playing === c.id ? '<span class="tag" style="background:var(--red);color:#fff">ON</span>' : "") + "</div>").join("")
+      : '<div class="rempty">' + (rpTab === "crash" ? "No wrecks logged this race yet." : "No highlights logged this race yet.") + "</div>";
+    $("rpState").textContent = RP.playing >= 0 ? (RP.reel ? "reel  ·  " : "replaying  ·  ") + "angle " + RP.take + " of " + RP.takes : RP.plan >= 0 ? "counting down" : RP.inCar ? "you're in the car" : "";
+  }
+  box.innerHTML = html;
+}
+$("rpList").addEventListener("click", async e => {
+  const c = e.target.closest("[data-crash]"), sk = e.target.closest("[data-seek]");
+  try {
+    if (c) { await apiPost("replay", { do: "crash", id: c.dataset.crash }); toast("Replay rolling"); }
+    else if (sk && TP && TP.frames > 1) tpSend({ do: "seek", f: (+sk.dataset.seek / (TP.frames - 1)).toFixed(4) });
+  } catch (err) { toast(err.message); }
+});
+document.querySelectorAll("[data-rt]").forEach(b => b.addEventListener("click", () => { rpTab = b.dataset.rt; document.querySelectorAll("[data-rt]").forEach(x => x.classList.toggle("on", x === b)); renderReplays(); }));
+$("rpReel").onclick = async () => { try { await apiPost("replay", { do: "reel" }); toast("Highlight reel"); } catch (e) { toast(e.message); } };
+$("rpLive").onclick = async () => { try { await apiPost("replay", { do: "live" }); } catch (e) { toast(e.message); } };
+replaysPoll(); tpPoll();
+
 function renderOnAir() {
   const L = st.live; if (!L) return;
+  renderPicker();
   renderChips();
   const scrub = st.scrubT != null;
   let car, cam, why, kind, tgTxt = "-", age = "", base, tv = 0;
@@ -1189,6 +1466,7 @@ async function openDyn() {
   $("dynForget").onclick = async () => { if (!confirm("Forget what RaceVision learned about this track (pit road, crash spots, which angles worked)?")) return; try { await apiPost("dyn/forget"); toast("Forgotten."); openDyn(); } catch (e) { toast(e.message); } };
 }
 $("btnDyn").onclick = () => openDyn();
+$("btnOv").onclick = () => { location.href = "/overlays" + (KEY ? "?k=" + encodeURIComponent(KEY) : ""); };
 
 // ---------------------------------------------------------------- preview: a simulated race through a camera set
 // A scripted race on the track's own map - a green run with battles and a pass, a crash, a caution with a pit cycle, the restart,
@@ -1628,6 +1906,7 @@ document.addEventListener("keydown", e => {
 renderLayers(); renderEvents(); setZoomButtons();
 if (!KEY) noteErr(new Error("not paired"));
 pollLive(); pollEvents(); pollMap();
+loadPickCams(); setInterval(loadPickCams, 30000);
 if (qs.get("file")) openFile(qs.get("file"));
 requestAnimationFrame(frame);
 </script>

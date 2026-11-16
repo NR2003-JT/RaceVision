@@ -1,0 +1,11 @@
+{
+ "title": "RaceVision Broadcast",
+ "base": "dash",
+ "layouts": {
+  "tag": "tag_dash",
+  "battle": "battle_dash",
+  "dash": "dash_dash",
+  "onboard": "onboard_classic",
+  "custom1": "RaceVision_Race_Bug"
+ }
+}

@@ -1,0 +1,212 @@
+{
+ "title": "RaceVision Driver Card",
+ "panel": "custom",
+ "w": 640,
+ "h": 150,
+ "when": "offboard",
+ "accent": "car",
+ "elements": [
+  {
+   "name": "Body",
+   "type": "rect",
+   "x": 190,
+   "y": 0,
+   "w": 450,
+   "h": 150,
+   "fill": "#0b0d12ee"
+  },
+  {
+   "name": "Colour plate",
+   "type": "rect",
+   "x": 0,
+   "y": 0,
+   "w": 236,
+   "h": 150,
+   "slant": 28,
+   "fill": "@car",
+   "fill2": "#101318"
+  },
+  {
+   "name": "Top line",
+   "type": "rect",
+   "x": 190,
+   "y": 0,
+   "w": 450,
+   "h": 3,
+   "fill": "@car"
+  },
+  {
+   "name": "Portrait",
+   "type": "portrait",
+   "x": 14,
+   "y": 12,
+   "w": 122,
+   "h": 126,
+   "tab": false,
+   "who": "car"
+  },
+  {
+   "name": "Number card",
+   "type": "image",
+   "x": 110,
+   "y": 96,
+   "w": 96,
+   "h": 44,
+   "art": "number",
+   "who": "car"
+  },
+  {
+   "name": "Number (no card art)",
+   "type": "text",
+   "x": 110,
+   "y": 92,
+   "w": 96,
+   "size": 40,
+   "text": "{car.number}",
+   "font": "Anton",
+   "color": "@white",
+   "align": "center",
+   "bold": false,
+   "show": "!car.has_card"
+  },
+  {
+   "name": "First name",
+   "type": "text",
+   "x": 236,
+   "y": 4,
+   "w": 380,
+   "size": 18,
+   "text": "{car.first}",
+   "font": "Kanit",
+   "color": "@grey",
+   "upper": true
+  },
+  {
+   "name": "Last name",
+   "type": "text",
+   "x": 232,
+   "y": 14,
+   "w": 396,
+   "size": 50,
+   "text": "{car.last}",
+   "font": "Anton",
+   "color": "@white",
+   "upper": true,
+   "bold": false
+  },
+  {
+   "name": "What he is doing",
+   "type": "run",
+   "x": 236,
+   "y": 72,
+   "w": 390,
+   "size": 15,
+   "font": "Saira Condensed",
+   "upper": true,
+   "show": "shot.sub",
+   "parts": [
+    {
+     "text": "{shot.sub}",
+     "color": "@grey"
+    }
+   ]
+  },
+  {
+   "name": "Stats line",
+   "type": "rect",
+   "x": 236,
+   "y": 94,
+   "w": 386,
+   "h": 1,
+   "fill": "#343840"
+  },
+  {
+   "name": "Position label",
+   "type": "text",
+   "x": 236,
+   "y": 100,
+   "w": 94,
+   "size": 12,
+   "text": "POSITION",
+   "font": "Saira Condensed",
+   "color": "@grey"
+  },
+  {
+   "name": "Position",
+   "type": "text",
+   "x": 236,
+   "y": 112,
+   "w": 94,
+   "size": 30,
+   "text": "{car.place_ord}",
+   "font": "Chakra Petch",
+   "color": "@gold"
+  },
+  {
+   "name": "Last Lap label",
+   "type": "text",
+   "x": 334,
+   "y": 100,
+   "w": 94,
+   "size": 12,
+   "text": "LAST LAP",
+   "font": "Saira Condensed",
+   "color": "@grey"
+  },
+  {
+   "name": "Last Lap",
+   "type": "text",
+   "x": 334,
+   "y": 112,
+   "w": 94,
+   "size": 30,
+   "text": "{car.last_lap}",
+   "font": "Chakra Petch",
+   "color": "@gold"
+  },
+  {
+   "name": "Best Lap label",
+   "type": "text",
+   "x": 432,
+   "y": 100,
+   "w": 94,
+   "size": 12,
+   "text": "BEST LAP",
+   "font": "Saira Condensed",
+   "color": "@grey"
+  },
+  {
+   "name": "Best Lap",
+   "type": "text",
+   "x": 432,
+   "y": 112,
+   "w": 94,
+   "size": 30,
+   "text": "{car.best_lap}",
+   "font": "Chakra Petch",
+   "color": "@gold"
+  },
+  {
+   "name": "Laps Led label",
+   "type": "text",
+   "x": 530,
+   "y": 100,
+   "w": 94,
+   "size": 12,
+   "text": "LAPS LED",
+   "font": "Saira Condensed",
+   "color": "@grey"
+  },
+  {
+   "name": "Laps Led",
+   "type": "text",
+   "x": 530,
+   "y": 112,
+   "w": 94,
+   "size": 30,
+   "text": "{car.laps_led}",
+   "font": "Chakra Petch",
+   "color": "@gold"
+  }
+ ]
+}

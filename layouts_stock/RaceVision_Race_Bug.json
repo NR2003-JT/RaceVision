@@ -1,0 +1,103 @@
+{
+ "title": "RaceVision Race Bug",
+ "panel": "custom",
+ "w": 360,
+ "h": 64,
+ "when": "always",
+ "accent": "car",
+ "elements": [
+  {
+   "name": "Panel",
+   "type": "rect",
+   "x": 0,
+   "y": 0,
+   "w": 360,
+   "h": 64,
+   "radius": 8,
+   "fill": "#0b0d12e6"
+  },
+  {
+   "name": "Green block",
+   "type": "rect",
+   "x": 0,
+   "y": 0,
+   "w": 78,
+   "h": 64,
+   "radius": 8,
+   "fill": "#2bb673",
+   "show": "race.green"
+  },
+  {
+   "name": "Yellow block",
+   "type": "rect",
+   "x": 0,
+   "y": 0,
+   "w": 78,
+   "h": 64,
+   "radius": 8,
+   "fill": "#ffc400",
+   "show": "!race.green"
+  },
+  {
+   "name": "Flag",
+   "type": "text",
+   "x": 0,
+   "y": 22,
+   "w": 78,
+   "size": 17,
+   "text": "{race.flag}",
+   "font": "Russo One",
+   "color": "#101318",
+   "align": "center",
+   "bold": false
+  },
+  {
+   "name": "Lap",
+   "type": "text",
+   "x": 92,
+   "y": 2,
+   "w": 180,
+   "size": 34,
+   "text": "LAP {race.lap}/{race.laps_total}",
+   "font": "Bebas Neue",
+   "color": "@white",
+   "bold": false
+  },
+  {
+   "name": "To go",
+   "type": "text",
+   "x": 92,
+   "y": 38,
+   "w": 120,
+   "size": 15,
+   "text": "{race.laps_to_go} TO GO",
+   "font": "Titillium Web",
+   "color": "@gold",
+   "upper": true
+  },
+  {
+   "name": "Track",
+   "type": "text",
+   "x": 200,
+   "y": 38,
+   "w": 150,
+   "size": 15,
+   "text": "{track.name}",
+   "font": "Titillium Web",
+   "color": "@grey",
+   "align": "right",
+   "upper": true
+  },
+  {
+   "name": "Race progress",
+   "type": "bar",
+   "x": 92,
+   "y": 57,
+   "w": 258,
+   "h": 4,
+   "src": "race.progress",
+   "color": "@gold",
+   "track": "#2a2f39"
+  }
+ ]
+}

@@ -1,0 +1,10 @@
+{
+ "title": "RaceVision Telemetry",
+ "base": "dash",
+ "layouts": {
+  "tag": "RaceVision_Driver_Card",
+  "battle": "battle_dash",
+  "dash": "RaceVision_Telemetry_Strip",
+  "custom1": "RaceVision_Race_Bug"
+ }
+}
