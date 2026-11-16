@@ -44,6 +44,7 @@
 #include <array>
 #include <set>
 #include <functional>
+#include <mutex>
 #include <xaudio2.h>
 #include <commdlg.h>
 #include <shellapi.h>
@@ -499,7 +500,7 @@ struct Settings {
 	bool tagStory = true;            // classic driver tag: a line about this car's race so far
 	bool overlayLivePos = true;      // overlays show where the car runs on track now (relative to the cars round it), not the last line crossing
 	double passSettle = 0.8, passLeadSettle = 0.35, passAheadM = 1.0, passHold = 1.5;   // a pass counts once the car is this far ahead for this long (s; lead battles quicker); it may cut in after pass_hold s
-	double blowoverM = 4.0, blowoverBonus = 8;   // a car this high above where it ran at that spot last lap has flipped (0 = off); a crash with one is worth this much more
+	double blowoverM = 4.0, blowoverBonus = 8, blowoverVz = 5.0;   // a car this high above where it ran at that spot last lap, and moving up or down at blowover_vz m/s or more in the last 3 s, has flipped (0 = off); a crash with one is worth blowover_bonus more
 	double headshotZoom = 1.35;      // driver photo crop: 1 = the whole picture, higher = closer on head and shoulders
 	double tagRotate = 6;            // ... changing to the next fact this often (seconds)
 	std::vector<int> stageLaps;      // laps the stages end on (stage finish positions)
@@ -815,6 +816,9 @@ static const char *DEFAULT_INI =
 	";   and its crash replay is worth blowover_bonus more (0 = off)\n"
 	"blowover_m = 4\n"
 	"blowover_bonus = 8\n"
+	"; the car must also be moving up or down at least this fast (m/s) within the last 3 s: a car on a different lane to last lap\n"
+	";   (banking) is higher without that. 0 = height alone\n"
+	"blowover_vz = 5\n"
 	"tag_rotate = 6\n"
 	"; laps the stages end on, e.g. stage_laps = 60, 120 (empty = no stage positions)\n"
 	"stage_laps =\n"
@@ -867,6 +871,7 @@ static void LoadSettings() {
 		if (k == "pass_hold") { S.passHold = std::max(0.0, std::min(30.0, d)); continue; }
 		if (k == "blowover_m") { S.blowoverM = std::max(0.0, std::min(30.0, d)); continue; }
 		if (k == "blowover_bonus") { S.blowoverBonus = std::max(0.0, std::min(50.0, d)); continue; }
+		if (k == "blowover_vz") { S.blowoverVz = std::max(0.0, std::min(40.0, d)); continue; }
 		if (k == "headshot_zoom") { S.headshotZoom = std::max(1.0, std::min(2.5, d)); continue; }
 		if (k == "min_hold") S.minHold = d;
 		else if (k == "max_hold") S.maxHold = d;
@@ -1088,6 +1093,7 @@ struct Car {
 	float z = 0, vz = 0, flipUp = 0;  // height and climb speed (m, m/s); how high above its own line at that spot it got when it flipped
 	std::vector<float> zProf;        // its height at each 10 m of the lap, last time round (a blowover is a car well above that)
 	double airSince = -1, flipAt = -1, flipSimT = -1;   // real time it left the ground / was called a blowover; game s of the same
+	double liftAt = -1000;           // real time of its last fast vertical movement (a real flip leaves the ground at speed; a car climbing the banking does not)
 	std::vector<std::pair<double, float>> mphHist;   // (real time, mph) for the brake
 	unsigned aiState = 0;           // AI state object (single-car qualifying)
 	int stallCount = 0, runEnd = 0, lapNum = 0;
@@ -1731,9 +1737,14 @@ static void Poll(Game &g) {
 			int nb = (int)(std::max(g_trackLen, 400.0f) / BUCKET) + 2, bk = (int)(c.dist / BUCKET) % nb;
 			if ((int)c.zProf.size() != nb) c.zProf.assign(nb, NAN);
 			float ref = c.zProf[bk], up = ref == ref ? c.z - ref : 0;
-			if (!c.pit && (ref != ref || up < 1.5f)) c.zProf[bk] = ref == ref ? ref * 0.5f + c.z * 0.5f : c.z;   // on the ground: learn the line
 			double tn = Now();
-			if (S.blowoverM > 0 && !c.pit && ref == ref && up > (float)S.blowoverM && c.speed > 10) {
+			if (fabsf(c.vz) >= (float)S.blowoverVz) c.liftAt = tn;
+			// a flip leaves the ground fast; a car that is simply on a different lane to last lap (banked tracks: Michigan, Talladega)
+			// is several metres higher with no vertical speed at all. Without lift, a high reading is the line, so learn it.
+			bool lift = S.blowoverVz <= 0 || tn - c.liftAt < 3.0;
+			if (!c.pit && (ref != ref || up < 1.5f || (!lift && up < 15.0f && c.speed > 10 && fabsf(c.vz) < 2.5f)))
+				c.zProf[bk] = ref == ref ? ref * 0.5f + c.z * 0.5f : c.z;   // on the ground: learn the line
+			if (S.blowoverM > 0 && !c.pit && ref == ref && up > (float)S.blowoverM && c.speed > 10 && lift) {
 				if (c.airSince < 0) c.airSince = tn;
 				c.flipUp = std::max(c.flipUp, up);
 				if (tn - c.airSince > 0.15 && (c.flipAt < 0 || tn - c.flipAt > 20)) {
@@ -3394,7 +3405,11 @@ static Panel g_qualBox = { "qual", 420, 96 };       // qualifying: pole + live d
 static void DrawQual(Graphics &gr, bool sample);
 static void DrawAlert(Graphics &gr, bool sample);
 static Panel g_custom[4] = { { "custom1", 400, 60 }, { "custom2", 400, 60 }, { "custom3", 400, 60 }, { "custom4", 400, 60 } };   // tickers etc. built in the layout editor (racevision_layout.cpp)
-static Panel *g_panels[] = { &g_tag, &g_battle, &g_onboard, &g_dash, &g_alert, &g_custom[0], &g_custom[1], &g_custom[2], &g_custom[3] };   // g_qualBox: Race Control shows qualifying timing now
+// RaceControl's overlays drawn from its feed (racevision_layout.cpp): timing box, telemetry strip, cone board, qualifying order.
+// They have their own layout picks (layout_rc_*), are off until one is chosen, and no style ever touches them.
+static Panel g_rc[4] = { { "rc_qual", 440, 132 }, { "rc_tele", 960, 172 }, { "rc_cone", 600, 300 }, { "rc_order", 1280, 56 } };
+static Panel *g_panels[] = { &g_tag, &g_battle, &g_onboard, &g_dash, &g_alert, &g_custom[0], &g_custom[1], &g_custom[2], &g_custom[3],
+                             &g_rc[0], &g_rc[1], &g_rc[2], &g_rc[3] };   // g_qualBox: Race Control shows qualifying timing now
 static bool g_edit = false, g_overlaysOn = true;
 static Game *g_game = nullptr;
 
@@ -4205,7 +4220,8 @@ static void DrawDash(Graphics &gr, bool sample) {
 
 #include "racevision_layout.cpp"
 
-static bool IsCustomPanel(const Panel &p) { return &p >= g_custom && &p < g_custom + 4; }
+static bool IsRcPanel(const Panel &p) { return &p >= g_rc && &p < g_rc + 4; }
+static bool IsCustomPanel(const Panel &p) { return (&p >= g_custom && &p < g_custom + 4) || IsRcPanel(p); }
 static void Render(Panel &p, bool show) {
 	if (!show) { if (p.shown) { ShowWindow(p.hwnd, SW_HIDE); p.shown = false; } return; }
 	if (const Layout *L = LayoutFor(p)) { p.baseW = (int)L->w; p.baseH = (int)L->h; }       // the layout sets the panel's size
@@ -4224,6 +4240,7 @@ static void Render(Panel &p, bool show) {
 		gr.Clear(C(0, 0, 0, 0));
 		gr.ScaleTransform(p.scale, p.scale);
 		bool sample = g_edit && (g_shot.car < 0 || !g_car[g_shot.car].valid);
+		if (IsRcPanel(p)) sample = g_edit;                          // moving them: show the sample board, whatever the feed says
 		if (&p != &g_alert && &p != &g_qualBox && LayDrawPanel(gr, p, sample)) {}           // from the panel's layout
 		else if (&p == &g_tag) { if (DashLook() && !OvReplay()) DrawTagDash(gr, sample); else DrawTag(gr, sample); }
 		else if (&p == &g_battle) { if (DashLook()) DrawBattleDash(gr, sample || g_shot.other < 0); else DrawBattle(gr, sample || g_shot.other < 0); }
@@ -4307,6 +4324,10 @@ static void CreatePanels(HINSTANCE inst) {
 	g_dash.x = 40; g_dash.y = 30;
 	g_alert.x = sw / 2 - 230; g_alert.y = 30;
 	for (int k = 0; k < 4; k++) { g_custom[k].x = sw / 2 - 200; g_custom[k].y = 120 + k * 80; }
+	g_rc[0].x = 40; g_rc[0].y = sh - 340;                         // timing box, bottom left above the tag
+	g_rc[1].x = sw / 2 - 480; g_rc[1].y = sh - 200;               // telemetry strip, bottom centre
+	g_rc[2].x = sw / 2 - 300; g_rc[2].y = 100;                    // cone board
+	g_rc[3].x = sw / 2 - 640; g_rc[3].y = sh - 70;                // qualifying order bar
 	for (Panel *p : g_panels) {
 		auto it = S.raw.find(std::string("overlay_") + p->key);
 		if (it != S.raw.end()) {
@@ -4507,12 +4528,13 @@ static void UpdateOverlays() {
 		bool on = g_overlaysOn && S.replayOverlays && g_car[g_rp.car].valid;
 		bool inCar = on && IsOnboard(g_rp.cam);
 		bool dashStyle = DashLook();
-		Render(g_tag, on && !inCar);
+		Render(g_tag, on && !inCar && !LayIsOff(g_tag));
 		Render(g_battle, false);
-		Render(g_onboard, inCar && !dashStyle);
-		Render(g_dash, inCar && dashStyle);
+		Render(g_onboard, inCar && !dashStyle && !LayIsOff(g_onboard));
+		Render(g_dash, inCar && dashStyle && !LayIsOff(g_dash));
 		Render(g_alert, S.replayBanner);              // it's a replay, not live (user, 2026-10-28)
 		for (Panel &cp : g_custom) Render(cp, LayCustomShow(cp, inCar, false));
+		for (Panel &rp : g_rc) Render(rp, LayRcShow(rp, inCar));
 		return;
 	}
 	bool live = g_overlaysOn && g_shot.car >= 0 && g_car[g_shot.car].valid && g_session == SESSION_RACE && !g_rp.phase && !g_youDrive;
@@ -4531,15 +4553,16 @@ static void UpdateOverlays() {
 	}
 	bool otherOk = g_shot.other >= 0 && g_car[g_shot.other].valid;
 	bool dashStyle = DashLook();
-	bool dash = dashStyle && gauges;                 // on board: the dash replaces the tag and the gauges
-	Render(g_tag, g_edit || (tag && !dash));
-	Render(g_battle, g_edit || (box && otherOk));
-	Render(g_onboard, (g_edit && !dashStyle) || (gauges && !dashStyle));
-	Render(g_dash, (g_edit && dashStyle) || dash);
+	bool dash = dashStyle && gauges && !LayIsOff(g_dash);                 // on board: the dash replaces the tag and the gauges
+	Render(g_tag, !LayIsOff(g_tag) && (g_edit || (tag && !dash)));
+	Render(g_battle, !LayIsOff(g_battle) && (g_edit || (box && otherOk)));
+	Render(g_onboard, !LayIsOff(g_onboard) && ((g_edit && !dashStyle) || (gauges && !dashStyle)));
+	Render(g_dash, !LayIsOff(g_dash) && ((g_edit && dashStyle) || dash));
 	Render(g_alert, g_edit || (S.replayBanner && g_rp.phase) || (g_overlaysOn && g_session == SESSION_RACE && AlertNow().kind != 0));
 	{   // layouts assigned to the custom panels (tickers and the like) show by their own "when"
 		bool onb = IsOnboard(g_lastCam), battleShot = (g_shot.kind == kBattle || g_shot.kind == kPass) && otherOk;
 		for (Panel &cp : g_custom) Render(cp, LayCustomShow(cp, onb, battleShot));
+		for (Panel &rp : g_rc) Render(rp, LayRcShow(rp, onb));       // RaceControl's boards, from the feed
 	}
 	// qualifying in practice: pole + the on-screen car's live delta, redrawn every update
 	ReadKo();
@@ -4826,7 +4849,7 @@ int main() {
 		{ "lead_battle_depth", "3" }, { "lead_battle_hold", "120" }, { "lead_battle_pack", "6" },
 		{ "art_folders", S.artFolders }, { "companion_folder", S.companionFolder }, { "art_series", S.artSeries },
 		{ "camera_call", "1" }, { "overlay_style", S.overlayStyle }, { "dash_accent", "#3CC8C8" }, { "dash_accent2", "#145A60" }, { "dash_art_colors", "0" }, { "dash_speed_max", "220" },
-		{ "tag_story", "1" }, { "overlay_live_positions", "1" }, { "headshot_zoom", "1.35" }, { "pass_settle", "0.8" }, { "pass_lead_settle", "0.35" }, { "pass_ahead_m", "1" }, { "pass_hold", "1.5" }, { "blowover_m", "4" }, { "blowover_bonus", "8" }, { "tag_rotate", "6" }, { "stage_laps", "" },
+		{ "tag_story", "1" }, { "overlay_live_positions", "1" }, { "headshot_zoom", "1.35" }, { "pass_settle", "0.8" }, { "pass_lead_settle", "0.35" }, { "pass_ahead_m", "1" }, { "pass_hold", "1.5" }, { "blowover_m", "4" }, { "blowover_bonus", "8" }, { "blowover_vz", "5" }, { "tag_rotate", "6" }, { "stage_laps", "" },
 		{ "crowd", "0" }, { "crowd_volume", "0.8" }, { "crowd_folder", "sounds\\crowd" }, { "crowd_favourites", "" },
 		{ "crowd_pass_depth", "10" }, { "crowd_cooldown", "6" }, { "crowd_events", "start, restart, lead, pass, crash, white, win" },
 		{ "overlay_gap", "150" }, { "qual_player_cam", "1" }, { "qual_close_ms", "150" }, { "qual_finish_pct", "30" }, { "qual_break_hold", "20" },
@@ -4912,7 +4935,7 @@ int main() {
 	g_logPath = g_ini;
 	g_logPath.replace(g_logPath.size() - 3, 3, "log");
 	g_logFile = fopen(g_logPath.c_str(), "w");
-	Log("RaceVision - NR2003 TV director\n");
+	Log("RaceVision 2.0.0-beta1 - NR2003 TV director\n");
 	Log("Settings: %s\n", g_ini);
 	Log("Ctrl+F8 crowd test sound, Ctrl+F9 overlays on/off, Ctrl+F10 overlay edit mode, Ctrl+F11 pause / resume, Ctrl+F12 quit.\n");
 	Log("Can be started any time (no telemetry used). Waiting for NR2003...\n\n");

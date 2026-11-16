@@ -26,60 +26,81 @@ static int g_dpi = 96;
 static int Px(double v) { return (int)lround(v * g_dpi / 96.0); }
 
 static const COLORREF U_BG = RGB(17, 19, 24), U_SIDE = RGB(11, 12, 16), U_CARD = RGB(26, 29, 36),
-	U_INPUT = RGB(12, 14, 18), U_LINE = RGB(50, 55, 66), U_TEXT = RGB(236, 239, 244), U_MUTED = RGB(134, 143, 160),
+	U_INPUT = RGB(12, 14, 18), U_LINE = RGB(50, 55, 66), U_TEXT = RGB(236, 239, 244), U_MUTED = RGB(144, 153, 170),
 	U_GOLD = RGB(255, 196, 0), U_GREEN = RGB(70, 200, 120), U_RED = RGB(235, 85, 75), U_TEAL = RGB(60, 200, 200);
 static const int UW = 1100, UH = 780, UH_MIN = 640, UHEAD = 64, USIDE = 200, UPAD = 28, UCX = USIDE + UPAD, UCW = UW - USIDE - 2 * UPAD,
 	UCY = 150, UCARD_H = 68;
+// The window can be made wider than UW. g_uw = its width now and g_cw = the width of the content now (96-dpi). The
+// settings pages (Director, Battles, Cameras, Replays, Overlays) are laid out from g_cw; Live, Art, Presets and Phone
+// keep their own fixed layout (UCW wide).
+static int g_uw = UW, g_cw = UCW;
 
-enum Page { pLive, pDirector, pBattles, pReplays, pCameras, pOverlays, pArt, pPresets, pPhone, PAGES };
-static const char *PageName[] = { "Live", "Director", "Battles", "Replays", "Cameras", "Overlays", "Art", "Presets", "Phone" };
+enum Page { pLive, pDirector, pBattles, pCameras, pReplays, pOverlays, pArt, pPresets, pPhone, PAGES };
+static const char *PageName[] = { "Live", "Director", "Battles", "Cameras", "Replays", "Overlays", "Art", "Presets", "Phone" };
+// the side bar groups its pages: a heading before the page that starts a group
+static const char *PageGroup[PAGES] = { "MONITOR", "DIRECTING", NULL, NULL, NULL, "BROADCAST", NULL, "SETUP", NULL };
 static const char *PageSub[] = {
 	"What the director is doing right now. Double-click a car to put it on TV.",
-	"How long shots last and when the director cuts to something better.",
+	"How long shots last, when the director cuts to something better, and what happens when you take over.",
 	"What counts as a battle, and how starts and restarts are handled.",
-	"Crashes: how they are found, when their replays roll, how they are shot, and every crash this race.",
-	"The cameras each kind of shot opens on, and the ones it follows with after that.",
+	"Which camera each kind of shot uses, and how the special cameras behave.",
+	"Crashes and highlights from this race, and how replays are found and shot.",
 	"Broadcast graphics drawn over the game (NR2003 in windowed or borderless mode).",
 	"Number cards, headshots and driver colours, from series art folders.",
 	"Save your settings as a preset of your own, and switch between presets in one click.",
-	"Run RaceVision from your phone: pick cars and cameras and change settings from its browser.",
+	"Run RaceVision from your phone: pick cars and cameras, and change settings, in its browser.",
 };
 static int g_page = pLive;
+// Cameras and Replays are long, so they have tabs
+static int TabCount(int p) { return p == pCameras ? 3 : p == pReplays ? 5 : 0; }
+static const char *TabName(int p, int t) {
+	static const char *cam[] = { "Shots", "Rear and drone", "Dynamic cameras" };
+	static const char *rep[] = { "This race", "Automatic replays", "Finding crashes", "Highlights", "Look and slow motion" };
+	return p == pCameras ? cam[t] : rep[t];
+}
+static int g_tab[PAGES] = {};
 // Pages taller than the window scroll (mouse wheel, or drag the bar on the right). The window can also be made
 // taller or shorter (it opens to fit the screen). g_oy = the scroll of the page being painted: the page drawing
 // helpers take it off every y, so page code keeps its plain layout numbers.
 static int g_uh = UH;                       // window height now (96-dpi)
 static int g_scroll[PAGES] = {}, g_oy = 0;
-// how far each page's own drawing goes down (from UCY); fields and controls are measured
-static const int PAGE_END[PAGES] = { 604, 0, 0, 1720, 558, 868, 558, 552, 604 };
+// how far each page's own drawing goes down (from UCY). The settings pages' numbers are worked out by FlowLayout();
+// the others are fixed.
+static int g_pageEnd[PAGES] = { 604, 0, 0, 0, 0, 0, 558, 552, 640 };
 
 static HFONT fTitle, fH1, fNav, fLabel, fBody, fSmall, fSection, fBig, fMono, fInput;
 static HBRUSH g_inputBrush, g_bgBrush, g_cardBrush;
 
 // ---- settings on the pages
+// A setting is a row on its page: the label and one sentence of help on the left, the control on the right. Rows are
+// not placed by hand: AddFields() lists them in order (with section titles) and Layout() puts them in two columns
+// from the width of the window.
 enum FieldKind { fNum, fToggle, fText, fColor, fChoice, fAction, fCams };
 struct Field {
-	int page; std::string key, label, help; FieldKind kind;
-	int x, y, w;                 // card, from the content's top left (fCams: the input box)
-	int cw = 0;                  // control width (0 = the kind's own)
+	int page = 0, tab = -1;      // tab: which tab of the page (-1 = all)
+	std::string key, label, help; FieldKind kind = fNum;
+	std::string unit;            // shown inside the box: s, m, %, ...
+	int x = 0, y = 0, w = 0, ht = UCARD_H;   // card (cell for camera chips), from the content's top left; set by Layout()
+	int cw = 0;                  // width of the control; set by Layout()
+	int want = 0;                // control width asked for (0 = the kind's own)
 	std::string choices;         // fChoice "value|Label;..."; fAction the button text
 	HWND h = NULL;
+	int ctl = -1;                // its place in g_ctls
 	bool bad = false;            // not a number
+	bool pick = false, single = false;   // camera chips (always for fCams): single = exactly one camera
+	bool full = false;           // a card across the whole width
+	bool hdr = false, bar = false, cell = false, fixed = false;   // hdr: button beside the page title; bar: button in a bar; cell: in the camera table; fixed: placed by hand
 };
 static std::vector<Field> g_fields;
-struct Section { int page, y; const char *text; };
-static const Section SECTIONS[] = {
-	{ pDirector, 0, "SHOTS" }, { pDirector, 262, "WHEN YOU TAKE OVER" }, { pDirector, 440, "GROUP AND INDY QUALIFYING" },
-	{ pBattles, 0, "BATTLES" }, { pBattles, 186, "START AND RESTARTS" }, { pBattles, 362, "LEAD BATTLES" }, 
-	{ pReplays, 0, "FINDING CRASHES" }, { pReplays, 264, "AUTOMATIC REPLAYS" }, { pReplays, 528, "HOW A REPLAY IS SHOT" },
-	{ pReplays, 792, "PLAY" }, { pReplays, 980, "CRASHES AND HIGHLIGHTS THIS RACE" }, { pReplays, 1722, "SLOW MOTION, WIPE AND PLAYBACK" },
-	{ pReplays, 2280, "OTHER HIGHLIGHTS" },
-	{ pCameras, 0, "CAMERAS PER SHOT" }, { pCameras, 574, "CAMERA CHANGES" }, { pCameras, 762, "OWN ANGLES (TEST)" }, { pCameras, 1482, "DRONE" }, { pCameras, 1680, "DYNAMIC CAMERAS (TEST)" },
-	{ pOverlays, 0, "GRAPHICS" }, { pOverlays, 186, "WHEN THEY SHOW" }, { pOverlays, 678, "PREVIEW (SAMPLE CAR)" },
-	{ pArt, 0, "ART FOLDERS" }, { pArt, 262, "SERIES" },
-	{ pPresets, 0, "PRESETS" },
-	{ pPhone, 0, "PAIR A PHONE" },
-};
+// the page, in order: section titles, setting rows, and a few blocks that are drawn by hand
+enum ItemType { iSection, iField, iCamTable, iBar, iPreview, iReplayList, iReplayLog };
+struct Item { int page = 0, tab = 0, type = iField, field = -1; std::string text, sub; std::vector<int> fields; int y = 0, h = 0; };
+static std::vector<Item> g_items;
+static const int RL_ROW = 34, RL_ROWS = 10;       // the crash list on the Replays page
+static int g_rlY = 0, g_rlogY = 0;                // where the crash list and the log start (from UCY)
+static int g_camX1 = 190, g_camX2 = 400;          // the camera table's two columns (from UCX)
+static std::vector<int> g_camRowY, g_camRowH;     // its rows (from UCY)
+
 struct CamRow { const char *label, *key; bool follow; };
 static const CamRow CAM_ROWS[] = {
 	{ "Crash", "incident", true }, { "Pass: the car passing", "pass", true }, { "Battle", "battle", true }, { "Leader", "leader", true },
@@ -104,141 +125,233 @@ static const char *CamName(int c) {
 }
 
 static void AddFields() {
-	auto F = [](int page, const char *key, const char *label, const char *help, FieldKind kind, int x, int y, int w = 414,
-	            int cw = 0, const char *choices = "") {
-		Field f; f.page = page; f.key = key; f.label = label; f.help = help; f.kind = kind; f.x = x; f.y = y; f.w = w;
-		f.cw = cw; f.choices = choices; g_fields.push_back(f);
+	int pg = 0, tb = 0;
+	auto At = [&](int p, int t = 0) { pg = p; tb = t; };
+	auto Sec = [&](const char *t, const char *sub = "") {
+		Item i; i.page = pg; i.tab = tb; i.type = iSection; i.text = t; i.sub = sub; g_items.push_back(i);
 	};
-	F(pDirector, "min_hold", "Shortest shot (s)", "A shot stays at least this long, unless a crash happens.", fNum, 0, 26);
-	F(pDirector, "max_hold", "Long shot (s)", "After this a shot counts half, so something fresh can take over.", fNum, 430, 26);
-	F(pDirector, "switch_margin", "Cut margin", "A new shot must score this many times the current one.", fNum, 0, 102);
-	F(pDirector, "revisit_after", "Revisit after (s)", "A car just shown counts half for this long, so the field gets seen.", fNum, 430, 102);
-	F(pDirector, "onboard_hold", "On-board shot (s)", "In-car and roof shots stay at least this long.", fNum, 0, 178);
-	F(pDirector, "tour_depth", "Running order tour", "With nothing going on, the tour visits the top this many cars.", fNum, 430, 178);
-	F(pDirector, "manual_hold", "Hands off after your pick (s)", "When you pick a car (V key or the Live page) the director waits this long.", fNum, 0, 288);
-	F(pDirector, "live_after_climb_out", "Back to live when you climb out", "Getting out of your car starts the game's replay; skip it so the broadcast carries on.", fToggle, 430, 288);
-	F(pDirector, "director_view", "Director view", "A live map of the cameras and a timeline of every cut, in your browser (also on the phone).", fAction, 430, 364, 414, 190, "Open director view");
-	F(pDirector, "qual_handoff_m", "Qualifying handoff before stripe (m)", "Switch to the next runner this far before the line. Race Control's timing box leads when it runs.", fNum, 0, 364);
-	F(pDirector, "qual_close_ms", "Group qualifying: close to the pace (ms)", "A car on a timed lap this close to the time to beat (or faster) goes on screen as it nears the line. Crashes still come first.", fNum, 0, 466);
-	F(pDirector, "qual_finish_pct", "Group qualifying: end of lap (%)", "How much of the lap, counted back from the line, counts as the end of the lap.", fNum, 430, 466);
-	F(pDirector, "qual_break_hold", "Group qualifying: shot in a break (s)", "Between rounds the top cars are shown, one shot this long each.", fNum, 0, 542);
+	auto Mk = [&](const char *key, const char *label, const char *help, FieldKind k) {
+		Field f; f.page = pg; f.tab = tb; f.key = key; f.label = label; f.help = help; f.kind = k; return f;
+	};
+	auto Put = [&](const Field &f) {
+		g_fields.push_back(f);
+		Item i; i.page = pg; i.tab = tb; i.type = iField; i.field = (int)g_fields.size() - 1; g_items.push_back(i);
+	};
+	auto Num = [&](const char *key, const char *label, const char *help, const char *unit = "") {
+		Field f = Mk(key, label, help, fNum); f.unit = unit; Put(f);
+	};
+	auto Tog = [&](const char *key, const char *label, const char *help) { Put(Mk(key, label, help, fToggle)); };
+	auto Txt = [&](const char *key, const char *label, const char *help) { Put(Mk(key, label, help, fText)); };
+	auto Col = [&](const char *key, const char *label, const char *help) { Put(Mk(key, label, help, fColor)); };
+	auto Cho = [&](const char *key, const char *label, const char *help, const char *choices) {
+		Field f = Mk(key, label, help, fChoice); f.choices = choices; Put(f);
+	};
+	auto Act = [&](const char *key, const char *label, const char *help, const char *button) {
+		Field f = Mk(key, label, help, fAction); f.choices = button; Put(f);
+	};
+	auto Cams = [&](const char *key, const char *label, const char *help, bool single = false) {
+		Field f = Mk(key, label, help, single ? fNum : fCams); f.pick = true; f.single = single; f.full = true; Put(f);
+	};
+	auto Hdr = [&](const char *key, const char *button) {          // a button beside the page title
+		Field f = Mk(key, "", "", fAction); f.tab = -1; f.hdr = true; f.choices = button; g_fields.push_back(f);
+	};
+	auto Fix = [&](const char *key, const char *label, const char *help, FieldKind k, int x, int y, int w, const char *button = "") {
+		Field f = Mk(key, label, help, k); f.fixed = true; f.x = x; f.y = y; f.w = w; f.choices = button; g_fields.push_back(f);
+	};
+	size_t bar = 0;
+	auto Bar = [&](const char *label) { Item i; i.page = pg; i.tab = tb; i.type = iBar; i.text = label; g_items.push_back(i); bar = g_items.size() - 1; };
+	auto BarBtn = [&](const char *key, const char *button) {
+		Field f = Mk(key, "", "", fAction); f.bar = true; f.choices = button; g_fields.push_back(f);
+		g_items[bar].fields.push_back((int)g_fields.size() - 1);
+	};
 
-	F(pBattles, "battle_gap", "Battle gap (s)", "Two cars this close (seconds) are a battle.", fNum, 0, 26);
-	F(pBattles, "battle_min_age", "Battle must last (s)", "A battle is worth a cut once it has lasted this long.", fNum, 430, 26);
-	F(pBattles, "short_track_m", "Short track under (m)", "On shorter tracks a battle means at the bumper or alongside.", fNum, 0, 102);
-	F(pBattles, "battle_short_m", "Short track battle (m)", "How close counts as a battle on a short track (metres).", fNum, 430, 102);
-	F(pBattles, "settle_laps", "Settle laps", "After a green the field is bunched up for this many laps...", fNum, 0, 212);
-	F(pBattles, "settle_positions", "Settle positions", "...when only battles up to this position count.", fNum, 430, 212);
-	F(pBattles, "settle_hold", "Settle shot length (s)", "Shots stay at least this long while the field settles.", fNum, 0, 288);
-	F(pBattles, "lead_battle_depth", "Lead battle: positions", "A battle for this position or better doesn't fade and holds the camera (0 = off).", fNum, 0, 388);
-	F(pBattles, "lead_battle_hold", "Lead battle: stay up to (s)", "Only a crash, a restart or something far bigger cuts away before this.", fNum, 430, 388);
-	F(pBattles, "lead_battle_pack", "Pack: cars within 1.5 s", "This many cars near the leader (superspeedway draft): lead battles directed as before.", fNum, 0, 464);
-	F(pReplays, "crash_drop", "Crash speed loss (m/s)", "Without damage read: losing this much speed quickly is a crash or spin (31 m/s = 70 mph).", fNum, 0, 102);
-	F(pReplays, "crash_window", "Within (s)", "...within this many seconds of game time.", fNum, 430, 102);
-	F(pReplays, "incident_hold", "Crash stays news (s)", "A crash stays a candidate shot this long.", fNum, 0, 178);
-	F(pReplays, "replay_auto", "Replay crashes by themselves", "Roll the replay of the crash most worth it once it is over (you out of your car).", fToggle, 0, 290);
-	F(pReplays, "replay_caution_only", "Only under caution", "Automatic replays wait for the yellow; the buttons work any time.", fToggle, 430, 290);
-	F(pReplays, "replay_countdown", "Countdown before it rolls (s)", "The crash alert counts down this long first.", fNum, 0, 366);
-	F(pReplays, "replay_worthy", "Worth a replay from", "Crash score: its damage + 0.5 for every car past the first.", fNum, 430, 366);
-	F(pReplays, "replay_after", "Wait after the crash (s)", "The crash must be over this long before its replay rolls.", fNum, 0, 442);
-	F(pReplays, "replay_within", "Too old after (s)", "A crash older than this (game seconds) isn't replayed by itself.", fNum, 430, 442);
-	F(pReplays, "replay_preroll", "Start before the hit (s)", "Each angle starts this long before its car's hardest hit.", fNum, 0, 554);
-	F(pReplays, "replay_max", "Longest angle (s)", "No angle runs longer than this.", fNum, 430, 554);
-	F(pReplays, "replay_angles", "Angles of a multi-car crash", "One per car hit hardest; the next one comes once the car on screen has stopped.", fNum, 0, 630);
-	F(pReplays, "replay_take", "Each later angle (s)", "At most this long after its own hit (sooner if its car stops).", fNum, 430, 630);
-	F(pReplays, "crash_damage", "A crash from damage", "One contact adding this much damage is a crash (rubs add 0.001 - 0.03).", fNum, 0, 26);
-	F(pReplays, "contact_join", "In it from damage", "A contact this big near a crash going on puts that car in it.", fNum, 430, 26);
-	F(pReplays, "cam_replay_angles", "Cameras for later angles", "After the Crash replay cameras (Cameras page). They must show the car: TV, chase, helicopter.", fText, 0, 706, 544, 150);
-	F(pReplays, "reel_angles", "Angles in the reel", "Per crash in the highlight reel.", fNum, 560, 706, 284, 64);
-	F(pReplays, "replay_now", "Replay the best crash", "The one most worth showing lately (again: back to live).", fAction, 0, 818, 414, 150, "Replay crash");
-	F(pReplays, "replay_live", "Back to live", "End a replay or the reel now.", fAction, 430, 818, 414, 150, "Back to live");
-	F(pReplays, "replay_drive", "Watch while driving: pause", "Ctrl+F7 or a replay button while in your car pauses the race, plays the replay, then resumes.", fToggle, 430, 894);
-	F(pReplays, "replay_smart", "Smart slow motion", "A big crash gets one slow-motion look at its hardest hit (the game's own slow motion), back to full speed right after it. Passes never do.", fToggle, 0, 1748);
-	F(pReplays, "replay_slow_impact", "Slow motion from a hit of", "Only a crash whose hardest single hit is this big gets a slow-motion look: one, of that hit, from the first replay camera, after the real-speed angles.", fNum, 430, 2610);
-	F(pReplays, "replay_slow_max", "Slowest speed (1 - 16)", "A big hit gets this slow: 1 = 1/2 speed ... 16 = 1/17. Smaller hits stay gentler.", fNum, 430, 1748);
-	F(pReplays, "replay_transition", "Replay wipe", "A full-screen TV wipe into a replay, between its angles and back to live.", fToggle, 0, 1824);
-	F(pReplays, "replay_transition_ms", "Wipe length (ms)", "How long the whole wipe takes: 400 - 5000. 1500 is the default; higher is slower.", fNum, 430, 1824);
-	F(pReplays, "replay_wipe_color", "Replay wipe colour", "The wipe's own colour. It has nothing to do with the dash accent, so the dash boxes keep each driver's art colour.", fColor, 0, 1900, 414, 120);
-	F(pReplays, "hide_companion_overlays", "Hide other apps' overlays in replays", "While a replay or its wipe is on, other programs' overlay windows (tickers, track maps ...) stay out of sight until you are back to live. RaceVision's own overlays stay.", fToggle, 430, 1900);
-	F(pReplays, "companion_apps", "Only these programs", "Blank = every other program's overlays. Or part of an exe name or path; ; between several.", fText, 0, 1976, 414, 120);
-	F(pReplays, "companion_keep", "Never hide these", "Programs whose windows always stay (part of an exe name or path; ; between several).", fText, 430, 1976, 414, 120);
-	F(pReplays, "tp_start", "Playback: to the start", "Jump to the beginning of the tape (your replay keys do the same).", fAction, 0, 2052, 414, 150, "To the start");
-	F(pReplays, "tp_back", "Playback: one frame back", "Step the tape back one frame (it pauses there).", fAction, 430, 2052, 414, 150, "Frame back");
-	F(pReplays, "tp_play", "Playback: play / pause", "Start the tape from live if no replay is running (you out of your car).", fAction, 0, 2128, 414, 150, "Play / pause");
-	F(pReplays, "tp_fwd", "Playback: one frame forward", "Step the tape forward one frame.", fAction, 430, 2128, 414, 150, "Frame forward");
-	F(pReplays, "tp_slower", "Playback: slower", "One step slower: 1/2, 1/3 ... 1/17.", fAction, 0, 2204, 414, 150, "Slower");
-	F(pReplays, "tp_faster", "Playback: faster", "One step faster: back to normal, then x2, x4.", fAction, 430, 2204, 414, 150, "Faster");
-	F(pReplays, "replay_reel", "Highlight reel", "Every crash worth a replay this race, and the other highlights, in race order.", fAction, 0, 894, 414, 150, "Highlight reel");
-	F(pReplays, "highlights", "Find other highlights", "Passes for the front, one car by several in a row, bump and runs and the finish go on the list below, the phone and the reel.", fToggle, 0, 2306);
-	F(pReplays, "highlight_gap", "At most one pass every (s)", "Passes, multi-passes and bump and runs: the better one in this many game seconds stays. The last lap is free.", fNum, 430, 2306);
-	F(pReplays, "multi_pass_cars", "Multi-pass: cars", "One car by this many cars in one corner or one straight. Last-lap passes for the podium count too.", fNum, 0, 2382);
-	F(pReplays, "superspeedways", "Superspeedways", "Track folder names (part of one; ; between). Multi-passes there count only on the last lap.", fText, 430, 2382, 414, 120);
-	F(pReplays, "highlight_bump", "Bump and runs", "The nose of the car behind hits the tail of the one ahead (no crash) and it gets by.", fToggle, 0, 2458);
-	F(pReplays, "bump_run_window", "Bump and run: by within (s)", "It gets by within this many seconds of the hit.", fNum, 0, 2686);
-	F(pReplays, "bump_run_depth", "Bump and run: for P1 to", "Only for this position or better.", fNum, 430, 2686);
-	F(pReplays, "highlight_preroll", "Start before the moment (s)", "Highlight replays start this long before the pass or the bump.", fNum, 430, 2458);
-	F(pReplays, "replay_finish", "Replay the finish", "Once the winner and the runner-up are across the line, the finish plays by itself (not while you drive).", fToggle, 0, 2534);
-	F(pReplays, "replay_finish_after", "...after (s)", "How long after the runner-up crosses the line.", fNum, 430, 2534);
-	F(pReplays, "reel_highlights", "Highlights in the reel", "The highlight reel plays these with the crashes. Off = crashes only.", fToggle, 0, 2610);
+	// ---- Director
+	At(pDirector);
+	Hdr("director_view", "Open director view in browser");
+	Sec("SHOT LENGTH", "How long the picture stays on one thing.");
+	Num("min_hold", "Shortest shot", "A shot always stays up at least this long, unless a crash happens.", "s");
+	Num("max_hold", "When a shot goes stale", "After this long a shot's score is halved, so something fresher can take over.", "s");
+	Num("onboard_hold", "On-board shot length", "In-car and roof shots stay up at least this long.", "s");
+	Num("switch_margin", "Cut threshold", "A new shot must score this many times higher than the current one before the director cuts to it.", "\xD7");
+	Num("revisit_after", "Revisit a car after", "A car that was just shown scores half for this long, so the whole field gets seen.", "s");
+	Num("tour_depth", "Running order tour", "With nothing else going on, the tour visits the top this many cars.", "cars");
+	Sec("WHEN YOU TAKE OVER", "You pick a car with the V key or on the Live page.");
+	Num("manual_hold", "Director waits after your pick", "No automatic cuts for this long after you choose a car.", "s");
+	Tog("live_after_climb_out", "Skip the game's replay when you climb out", "Getting out of your car starts NR2003's own replay. When this is on, RaceVision skips it so the broadcast carries on.");
+	Sec("QUALIFYING", "Group and Indy qualifying, with many cars on track.");
+	Num("qual_handoff_m", "Hand off before the stripe", "Switch to the next runner this far before the line. Race Control's timing box leads when it runs.", "m");
+	Num("qual_close_ms", "Close to the pace", "A car on a timed lap this close to the time to beat (or faster) goes on screen as it nears the line. Crashes still come first.", "ms");
+	Num("qual_finish_pct", "End of the lap", "How much of the lap, counted back from the line, counts as the end of the lap.", "%");
+	Num("qual_break_hold", "Shot length in a break", "Between rounds the top cars are shown, one shot this long each.", "s");
 
-	for (int r = 0; r < (int)(sizeof CAM_ROWS / sizeof CAM_ROWS[0]); r++) {
-		F(pCameras, (std::string("cam_") + CAM_ROWS[r].key).c_str(), "", "", fCams, 180, 64 + r * 37, 0, 130);
-		if (CAM_ROWS[r].follow)
-			F(pCameras, (std::string("cam_") + CAM_ROWS[r].key + "_follow").c_str(), "", "", fCams, 330, 64 + r * 37, 0, 200);
+	// ---- Battles
+	At(pBattles);
+	Sec("BATTLES", "When two cars count as fighting each other.");
+	Num("battle_gap", "Battle gap", "Two cars this close together are a battle.", "s");
+	Num("battle_min_age", "Battle must last", "A battle is worth a cut once the cars have been this close for this long.", "s");
+	Num("short_track_m", "Short track below", "On tracks shorter than this, a battle means cars at the bumper or alongside, not a gap in seconds.", "m");
+	Num("battle_short_m", "Battle distance, short tracks", "How close two cars must be to count as a battle on a short track.", "m");
+	Sec("AFTER A START OR RESTART", "The field is bunched up, so almost everything looks like a battle.");
+	Num("settle_laps", "Bunched-up period", "After the green, the field is treated as bunched up for this many laps.", "laps");
+	Num("settle_positions", "Only the top positions count", "While the field is bunched up, only battles for this position or better count.");
+	Num("settle_hold", "Shot length while bunched up", "Shots stay up at least this long while the field settles.", "s");
+	Sec("LEAD BATTLES", "A fight for the front.");
+	Num("lead_battle_depth", "Lead battle: top positions", "A battle for this position or better doesn't fade, and holds the camera. 0 turns lead battles off.");
+	Num("lead_battle_hold", "Lead battle: stay up for", "Only a crash, a restart or something far bigger cuts away before this.", "s");
+	Num("lead_battle_pack", "Pack size", "If this many cars run within 1.5 s of the leader (a superspeedway draft), lead battles are treated like any other battle.", "cars");
+
+	// ---- Cameras
+	At(pCameras, 0);
+	Hdr("cam_map", "Show camera map");
+	Sec("CAMERA PER SHOT", "A shot starts on one of the cameras in the first column, then switches to the second. Empty keeps the current camera.");
+	{
+		Item t; t.page = pCameras; t.tab = 0; t.type = iCamTable;
+		for (auto &r : CAM_ROWS) {
+			Field a = Mk((std::string("cam_") + r.key).c_str(), "", "", fCams); a.pick = true; a.cell = true; g_fields.push_back(a);
+			t.fields.push_back((int)g_fields.size() - 1);
+			if (r.follow) {
+				Field b = Mk((std::string("cam_") + r.key + "_follow").c_str(), "", "", fCams); b.pick = true; b.cell = true; g_fields.push_back(b);
+				t.fields.push_back((int)g_fields.size() - 1);
+			}
+		}
+		g_items.push_back(t);
 	}
-	F(pCameras, "camera_call", "Game camera switch", "Change cameras the way the C key does (keeps camera sounds right).", fToggle, 0, 600, 544);
-	F(pCameras, "onboard_cams", "On-board cameras", "Cameras that count as on-board: they get the in-car dash.", fText, 0, 676, 544, 150);
-	F(pCameras, "follow_after", "Follow after (s)", "Leave the opening camera after this long.", fNum, 560, 600, 284, 64);
-	F(pCameras, "camera_every", "Next camera (s)", "Then change camera this often; 0 = never.", fNum, 560, 676, 284, 64);
-	F(pCameras, "custom_cams", "Own angles on the spare cameras", "Chase 2 (6), Far chase 2 (7) and 22-40 use your own angles: set them on the phone (Cameras > Adjust).", fToggle, 0, 788, 844);
-	F(pCameras, "drone_quiet", "Drone (23) without sound", "No helicopter sound on the Drone; the Helicopter (16) keeps it.", fToggle, 0, 1320);
-	F(pCameras, "tv_cut_gap", "TV camera change gap (s)", "No cut this close to a TV camera's own change; 0 = off.", fNum, 430, 1320);
-	F(pCameras, "tv_cut_wait", "Wait for it at most (s)", "Longer than this, the cut goes ahead anyway.", fNum, 0, 1396);
-	F(pCameras, "drone_distance", "Drone trail distance (%)", "How far behind the car the Drone follows, % of the game's helicopter (50 = about half).", fNum, 0, 1508);
-	F(pCameras, "drone_top_mph", "Drone top speed (mph)", "The game's 175: faster cars leave it behind until it jumps back beside them.", fNum, 430, 1508);
-	F(pCameras, "drone_hover_m", "Drone holds still within (m)", "This close to the car it stops chasing (the game's 25).", fNum, 0, 1584);
-	F(pCameras, "cam_map", "Camera map", "Where each TV camera is and what it shows.", fAction, 430, 1396, 414, 150, "Show camera map");
-	F(pCameras, "rear_pan", "Rear (11) follows the car behind", "Turns to the nearest car behind or alongside it, with a wide lens.", fToggle, 0, 1092);
-	F(pCameras, "rear_pan_span", "Turns up to (degrees)", "Either way from straight back (90 = looking out the side).", fNum, 430, 1092);
-	F(pCameras, "rear_pan_fov", "Rear lens (degrees)", "Wider = more fish-eye (the game's is 78).", fNum, 0, 1168);
-	F(pCameras, "rear_mount", "Rear (11) from the car ahead", "Shows the TV car from the car just ahead of it; the overlays stay on the TV car.", fToggle, 430, 1168);
-	F(pCameras, "rear_mount_m", "Car ahead within (m)", "Nobody that close ahead of the TV car: the setting beside this.", fNum, 0, 1244);
-	F(pCameras, "rear_alone", "Nobody ahead (camera)", "11 = its own rear cam looking at the car behind; 4 = chase.", fNum, 430, 1244);
-	F(pCameras, "dyn_cams", "Dynamic cameras", "RaceVision places its own static cameras - pit road, crashes, restarts, battles, the finish - and learns the track as it goes. Off = only the game's cameras.", fToggle, 0, 1744);
-	F(pCameras, "dyn_chance", "How often (%)", "Of the shots that could have one, this many get a dynamic camera; the rest use the game's cameras.", fNum, 430, 1744);
-	F(pCameras, "dyn_pit", "Pit road", "Who dives in, the stall, the race off pit road.", fToggle, 0, 1820);
-	F(pCameras, "dyn_crash", "Crashes", "A new angle on the wreck each time.", fToggle, 430, 1820);
-	F(pCameras, "dyn_restart", "Restarts", "Low and close at the green.", fToggle, 0, 1896);
-	F(pCameras, "dyn_battle", "Battles and passes", "Trackside, ahead of the cars.", fToggle, 430, 1896);
-	F(pCameras, "dyn_finish", "The finish", "At the line for the last lap.", fToggle, 0, 1972);
-	F(pCameras, "dyn_learn", "Learn the track", "Pit road, the width of the track, where crashes happen, which angles worked (saved per track).", fToggle, 430, 1972);
-	F(pCameras, "dyn_half_width", "Track half width (m)", "0 = learn it from where the cars drive.", fNum, 0, 2048);
-	F(pCameras, "dyn_yaw_fix", "Aim correction (degrees)", "Added to the turn if the camera looks off to one side of the car.", fNum, 430, 2048);
-	F(pCameras, "dyn_pitch_sign", "Tilt direction (1 or -1)", "-1 if the camera looks up when it should look down.", fNum, 0, 2124);
-	F(pCameras, "dyn_rig", "Smooth following", "Its own fast thread follows the car, rebuilt between the game's physics ticks (off = the old jumpy way).", fToggle, 430, 2124);
-	F(pCameras, "dyn_autozoom", "Zoom with the car", "The lens widens as the car comes close and narrows as it goes: the car keeps its size.", fToggle, 0, 2200);
-	F(pCameras, "dyn_smooth", "Pan smoothing", "1 = standard. Lower is quicker and tighter, higher is softer.", fNum, 430, 2200);
+	Sec("ON-BOARD AND SWITCHING");
+	Cams("onboard_cams", "On-board cameras", "Cameras that count as on-board. They get the in-car dash.");
+	Num("follow_after", "Switch after", "A shot leaves its starting camera for its second set after this long.", "s");
+	Num("camera_every", "Then change every", "After that the camera changes this often. 0 = never.", "s");
+	Tog("camera_call", "Use the game's camera switch", "Changes cameras the way the C key does, which keeps the camera sounds right.");
+	At(pCameras, 1);
+	Sec("REAR CAMERA (11)");
+	Tog("rear_pan", "Follow the car behind", "The rear camera turns to the nearest car behind or alongside it, with a wide lens.");
+	Num("rear_pan_span", "Turns up to", "Either way from straight back (90 = looking out the side).", "\xB0");
+	Num("rear_pan_fov", "Lens width", "Wider is more fish-eye. The game's own is 78.", "\xB0");
+	Tog("rear_mount", "Shoot from the car ahead", "Shows the TV car from the car just ahead of it. The overlays stay on the TV car.");
+	Num("rear_mount_m", "Car ahead must be within", "If nobody is this close ahead of the TV car, the camera below is used instead.", "m");
+	Cams("rear_alone", "Camera when nobody is ahead", "One camera: 11 is the TV car's own rear camera looking back, 4 is the chase camera.", true);
+	Sec("DRONE (23)");
+	Tog("drone_quiet", "Drone without sound", "No helicopter sound on the Drone. The Helicopter (16) keeps it.");
+	Num("drone_distance", "Trail distance", "How far behind the car the Drone follows, as a percentage of the game's helicopter (50 = about half).", "%");
+	Num("drone_top_mph", "Top speed", "The game's own is 175. Faster cars leave it behind until it jumps back beside them.", "mph");
+	Num("drone_hover_m", "Holds still within", "Closer than this to the car, the Drone stops chasing. The game's own is 25.", "m");
+	Sec("TV CAMERAS");
+	Num("tv_cut_gap", "Gap around a TV camera change", "No cut this close to a TV camera's own change. 0 = off.", "s");
+	Num("tv_cut_wait", "Wait for it at most", "If the TV camera change takes longer than this, the cut goes ahead anyway.", "s");
+	At(pCameras, 2);
+	Sec("DYNAMIC CAMERAS", "RaceVision's own static cameras, placed on the pit lane camera blocks.");
+	Tog("dyn_cams", "Dynamic cameras", "RaceVision places its own static cameras (pit road, crashes, restarts, battles, the finish) and learns the track as it goes. Off = only the game's cameras.");
+	Num("dyn_chance", "How often", "Of the shots that could have one, this many get a dynamic camera. The rest use the game's cameras.", "%");
+	Sec("WHERE THEY ARE USED");
+	Tog("dyn_pit", "Pit road", "Who dives in, the stall, and the race off pit road.");
+	Tog("dyn_crash", "Crashes", "A new angle on the wreck each time.");
+	Tog("dyn_restart", "Restarts", "Low and close at the green.");
+	Tog("dyn_battle", "Battles and passes", "Trackside, ahead of the cars.");
+	Tog("dyn_finish", "The finish", "At the line for the last lap.");
+	Sec("TRACK LEARNING AND AIM");
+	Tog("dyn_learn", "Learn the track", "Pit road, track width, where crashes happen and which angles worked, saved per track.");
+	Num("dyn_half_width", "Track half width", "0 = learn it from where the cars drive.", "m");
+	Num("dyn_yaw_fix", "Aim correction", "Added to the turn if a camera looks off to one side of the car.", "\xB0");
+	Num("dyn_pitch_sign", "Tilt direction", "1 or -1. Use -1 if a camera looks up when it should look down.");
+	Sec("MOTION");
+	Tog("dyn_rig", "Smooth following", "A fast thread of its own follows the car, rebuilt between the game's physics ticks. Off = the old jumpy way.");
+	Tog("dyn_autozoom", "Zoom with the car", "The lens widens as the car comes close and narrows as it goes, so the car keeps its size.");
+	Num("dyn_smooth", "Pan smoothing", "1 = standard. Lower is quicker and tighter, higher is softer.");
+	Sec("YOUR OWN CAMERA ANGLES");
+	Tog("custom_cams", "Own angles on the spare cameras", "Chase 2 (6), Far chase 2 (7) and 22-40 use your own angles. Set them on the phone (Cameras > Adjust).");
 
-	F(pOverlays, "overlays", "Overlays", "Show the broadcast graphics. Ctrl+F9 switches them on and off.", fToggle, 0, 26);
-	F(pOverlays, "overlay_style", "Style", "Dash: TV-style in-car dash. Classic: plain tag and gauges.", fChoice, 430, 26, 414, 170, "dash|Dash;classic|Classic");
-	F(pOverlays, "dash_accent", "Dash accent colour", "Border and position colour of the dash look.", fColor, 0, 102, 414, 120);
-	F(pOverlays, "dash_speed_max", "Speedo top (mph)", "Speed at the end of the dash's speed arc.", fNum, 430, 102);
-	F(pOverlays, "overlay_min_run_laps", "Laps into a run", "The driver tag and battle box wait this many green laps.", fNum, 0, 212);
-	F(pOverlays, "overlay_gap", "Time between tags (s)", "Tag / battle box at most this often. The dash shows on every in-car shot.", fNum, 430, 212);
-	F(pOverlays, "tag_story", "Race story line", "Start vs now, restarts, stages, last stop, laps led under the tag.", fToggle, 0, 288);
-	F(pOverlays, "tag_rotate", "Story changes every (s)", "How long each race story fact stays up.", fNum, 430, 288);
-	F(pOverlays, "replay_banner", "Replay banner", "REPLAY, the car, the angle and the time back to live, all through a replay (even with overlays off).", fToggle, 0, 440);
-	F(pOverlays, "replay_overlays", "Overlays in replays", "The driver tag on the replay's car; the dash when the angle is in-car.", fToggle, 430, 440);
-	F(pOverlays, "stage_laps", "Stage end laps", "Laps the stages end on, e.g. 60, 120 (empty = none).", fText, 0, 364, 414, 150);
-	F(pOverlays, "move", "Place on screen", "Drag the panels to move them, mouse wheel to resize.", fAction, 430, 364, 414, 150, "Move overlays");
-	F(pOverlays, "dash_accent2", "Dash plate fade colour", "The driver plate fades from the accent into this. Pick the accent again for a solid plate.", fColor, 0, 516, 414, 120);
-	F(pOverlays, "layout_editor", "Layout editor", "Build your own overlays and tickers in the browser: move every element, choose the data that feeds it, use PNGs from GIMP.", fAction, 0, 592, 414, 150, "Open layout editor");
-	F(pOverlays, "dash_art_colors", "Driver colours from the art", "Each car's dash in its own colour (the art's colors.json). Cars without one keep the accent.", fToggle, 430, 516);
+	// ---- Replays
+	At(pReplays, 0);
+	Bar("REPLAY");
+	BarBtn("replay_now", "Replay best crash"); BarBtn("replay_reel", "Highlight reel"); BarBtn("replay_live", "Back to live");
+	Bar("TAPE");
+	BarBtn("tp_start", "To the start"); BarBtn("tp_back", "Frame back"); BarBtn("tp_play", "Play / pause"); BarBtn("tp_fwd", "Frame forward");
+	BarBtn("tp_slower", "Slower"); BarBtn("tp_faster", "Faster");
+	Sec("CRASHES AND HIGHLIGHTS", "Best first. Click a row to play it.");
+	{ Item i; i.page = pReplays; i.tab = 0; i.type = iReplayList; g_items.push_back(i); }
+	Sec("REPLAY LOG");
+	{ Item i; i.page = pReplays; i.tab = 0; i.type = iReplayLog; g_items.push_back(i); }
+	At(pReplays, 1);
+	Sec("AUTOMATIC REPLAYS", "Replays that start by themselves once you are out of your car.");
+	Tog("replay_auto", "Replay crashes by themselves", "Rolls the replay of the crash most worth it once it is over.");
+	Tog("replay_caution_only", "Only under caution", "Automatic replays wait for the yellow. The buttons on the This race tab work any time.");
+	Num("replay_countdown", "Countdown before it rolls", "The crash alert counts down this long first.", "s");
+	Num("replay_worthy", "Minimum crash score", "Score = the crash's damage, plus 0.5 for every car involved after the first.");
+	Num("replay_after", "Wait after the crash", "The crash must have been over this long before its replay rolls.", "s");
+	Num("replay_within", "Too old after", "A crash older than this (in game seconds) isn't replayed by itself.", "s");
+	Sec("THE FINISH");
+	Tog("replay_finish", "Replay the finish", "Once the winner and the runner-up are across the line, the finish plays by itself (not while you drive).");
+	Num("replay_finish_after", "Wait after the runner-up", "How long after the runner-up crosses the line the replay starts.", "s");
+	At(pReplays, 2);
+	Sec("FINDING CRASHES", "What counts as a crash.");
+	Num("crash_damage", "Crash from damage", "One contact adding this much damage is a crash. Rubs add 0.001 to 0.03.");
+	Num("contact_join", "Joins a crash from damage", "A contact this big near a crash in progress puts that car in it.");
+	Num("crash_drop", "Crash from speed loss", "When damage can't be read, losing this much speed quickly counts as a crash or spin (31 m/s = 70 mph).", "m/s");
+	Num("crash_window", "Speed loss counted within", "The speed loss must happen within this much game time.", "s");
+	Num("incident_hold", "Crash stays news", "A crash stays a candidate for the TV shot this long.", "s");
+	Sec("HOW A REPLAY IS SHOT");
+	Num("replay_preroll", "Start before the hit", "Each angle starts this long before its car's hardest hit.", "s");
+	Num("replay_max", "Longest angle", "No angle runs longer than this.", "s");
+	Num("replay_angles", "Angles for a multi-car crash", "One angle per car hit hardest. The next one starts once the car on screen has stopped.");
+	Num("replay_take", "Each later angle at most", "The longest a later angle runs after its own hit (sooner if its car stops).", "s");
+	Num("reel_angles", "Angles per crash in the reel", "How many angles each crash gets in the highlight reel.");
+	Cams("cam_replay_angles", "Cameras for later angles", "Used after the Crash replay camera (Cameras page). They must show the car: TV, chase or helicopter.");
+	At(pReplays, 3);
+	Sec("OTHER HIGHLIGHTS", "Passes, bump and runs and the finish.");
+	Tog("highlights", "Find other highlights", "Passes for the front, one car by several in a row, bump and runs and the finish go on the list, the phone and the reel.");
+	Num("highlight_gap", "At most one pass every", "Of the passes, multi-passes and bump and runs inside this much game time, the better one stays. The last lap is free.", "s");
+	Num("multi_pass_cars", "Multi-pass: cars", "One car by this many cars in one corner or one straight. Last-lap passes for the podium count too.", "cars");
+	Txt("superspeedways", "Superspeedways", "Track folder names, or part of one, with ; between several. Multi-passes there count only on the last lap.");
+	Num("highlight_preroll", "Start before the moment", "Highlight replays start this long before the pass or the bump.", "s");
+	Sec("BUMP AND RUNS");
+	Tog("highlight_bump", "Bump and runs", "The nose of the car behind hits the tail of the one ahead (no crash) and it gets by.");
+	Num("bump_run_window", "Counts if it gets by within", "It must get by within this long after the hit.", "s");
+	Num("bump_run_depth", "Only for position", "Only for this position or better.");
+	Sec("HIGHLIGHT REEL");
+	Tog("reel_highlights", "Highlights in the reel", "The highlight reel plays these with the crashes. Off = crashes only.");
+	At(pReplays, 4);
+	Sec("SLOW MOTION");
+	Tog("replay_smart", "Smart slow motion", "A big crash gets one slow-motion look at its hardest hit (NR2003's own slow motion), then back to full speed. Passes never do.");
+	Num("replay_slow_impact", "Needs a hit of at least", "Only a crash whose hardest single hit reaches this gets one slow-motion look, after the normal-speed angles.");
+	Num("replay_slow_max", "Slowest speed", "1 to 16: 1 = 1/2 speed, 16 = 1/17. Smaller hits stay gentler.");
+	Sec("TV WIPE");
+	Tog("replay_transition", "Replay wipe", "A full-screen TV wipe into a replay, between its angles and back to live.");
+	Num("replay_transition_ms", "Wipe length", "400 to 5000. The default is 1500. Higher is slower.", "ms");
+	Col("replay_wipe_color", "Wipe colour", "The wipe's own colour. It is separate from the dash accent, so the dash boxes keep each driver's art colour.");
+	Sec("OTHER PROGRAMS AND DRIVING");
+	Tog("hide_companion_overlays", "Hide other programs' overlays in replays", "While a replay or its wipe is on, other programs' overlay windows (tickers, track maps...) stay out of sight until you are back to live. RaceVision's own overlays stay.");
+	Txt("companion_apps", "Only these programs", "Blank = every other program. Otherwise part of an exe name or path, with ; between several.");
+	Txt("companion_keep", "Never hide these", "Programs whose windows always stay (part of an exe name or path, with ; between several).");
+	Tog("replay_drive", "Watch while driving: pause", "Ctrl+F7 or a replay button while in your car pauses the race, plays the replay, then resumes.");
 
-	F(pPhone, "remote", "Phone remote", "Let phones on this network run RaceVision from their browser.", fToggle, 320, 26, 524);
-	F(pPhone, "remote_port", "Port", "The network port the phone page uses (8090 unless something else has it).", fNum, 320, 102, 524);
-	F(pPhone, "remote_newkey", "Pairing code", "A new code locks out every phone that scanned the old one.", fAction, 320, 178, 524, 150, "New code");
-	F(pPhone, "remote_scanner", "Scanner on the phone", "Phones can play AIMOD's team radio scanner (AIMOD running on this PC with its scanner on).", fToggle, 320, 254, 524);
+	// ---- Overlays
+	At(pOverlays);
+	{ Item i; i.page = pOverlays; i.tab = 0; i.type = iPreview; g_items.push_back(i); }
+	Sec("SHOW", "What is drawn, and in which look.");
+	Tog("overlays", "Overlays", "Show the broadcast graphics. Ctrl+F9 switches them on and off.");
+	Cho("overlay_style", "Style", "Dash: TV-style in-car dash. Classic: plain tag and gauges.", "dash|Dash;classic|Classic");
+	Tog("replay_banner", "Replay banner", "REPLAY, the car, the angle and the time back to live, all through a replay (even with overlays off).");
+	Tog("replay_overlays", "Overlays in replays", "The driver tag on the replay's car, and the dash when the angle is in-car.");
+	Sec("WHEN THEY APPEAR", "The tag and battle box are kept sparing on purpose.");
+	Num("overlay_min_run_laps", "Green laps into a run", "The driver tag and battle box wait this many green laps.", "laps");
+	Num("overlay_gap", "Time between tags", "The tag or battle box shows at most this often. The dash shows on every in-car shot.", "s");
+	Tog("tag_story", "Race story line", "Start vs now, restarts, stages, last stop and laps led, under the tag.");
+	Num("tag_rotate", "Story changes every", "How long each race story fact stays up.", "s");
+	Txt("stage_laps", "Stage end laps", "Laps the stages end on, for example 60, 120. Empty = none.");
+	Sec("DASH LOOK");
+	Col("dash_accent", "Accent colour", "Border and position colour of the dash look.");
+	Col("dash_accent2", "Plate fade colour", "The driver plate fades from the accent into this. Pick the accent again for a solid plate.");
+	Tog("dash_art_colors", "Driver colours from the art", "Each car's dash in its own colour (the art's colors.json). Cars without one keep the accent.");
+	Num("dash_speed_max", "Speedo top", "Speed at the end of the dash's speed arc.", "mph");
+	Sec("TOOLS");
+	Act("move", "Place on screen", "Drag the panels to move them, mouse wheel to resize.", "Move overlays");
+	Act("layout_editor", "Layout editor", "Build your own overlays and tickers in the browser: move every element, choose the data that feeds it, use PNGs from GIMP.", "Open layout editor");
+
+	// ---- Phone (placed by hand beside the QR code)
+	At(pPhone);
+	Fix("remote", "Phone remote", "Lets phones on this network run RaceVision from their browser.", fToggle, 320, 26, 524);
+	Fix("remote_port", "Port", "The network port the phone page uses (8090 unless something else has it).", fNum, 320, 102, 524);
+	Fix("remote_newkey", "Pairing code", "A new code locks out every phone that scanned the old one.", fAction, 320, 178, 524, "New code");
+	Fix("remote_scanner", "Scanner on the phone", "Phones can play AIMOD's team radio scanner (AIMOD running on this PC with its scanner on).", fToggle, 320, 254, 524);
 }
 
 static std::string Raw(const std::string &key) {
@@ -343,7 +456,7 @@ enum {
 };
 static HWND g_btnPause, g_btnOverlays, g_btnMove, g_btnCopy, g_btnOpenLog, g_lbField, g_lbLog, g_lbFolders, g_lbSeries,
 	g_btnAdd, g_btnRemove, g_lbPresets, g_lbDiffs, g_edPresetName;
-struct Ctl { HWND h; int page, x, y, w, hgt; bool clipped = false; };   // where it sits on its page (96-dpi, unscrolled)
+struct Ctl { HWND h; int page, x, y, w, hgt; bool clipped = false; int tab = -1; };   // where it sits on its page (96-dpi, unscrolled)
 static std::vector<Ctl> g_ctls;
 
 static HWND MakeCtl(const char *cls, DWORD style, int id, int page, int x, int y, int w, int h, const char *text = "") {
@@ -366,14 +479,339 @@ static HWND MakeList(int id, int page, int x, int y, int w, int h) {
 	return l;
 }
 
+static std::string ChoicesOf(const Field &f);
+static void Commit(Field &f, const std::string &value);
+static std::string KeyLabel(const Field &f);
+static void PlaceCtls();
+static void Relayout();
+static std::string CamList(const std::string &v);
+static bool IsPick(const Field &f) { return f.kind == fCams || f.pick; }   // camera chips instead of a box
+
 // where a field's control sits (96-dpi window coordinates)
 static RECT FieldBox(const Field &f) {
 	int X = UCX + f.x, Y = UCY + f.y;
-	if (f.kind == fCams) return { X, Y, X + f.cw, Y + 32 };
-	int cw = f.cw ? f.cw : f.kind == fToggle ? 46 : f.kind == fNum ? 84 : 150;
-	int ch = f.kind == fToggle ? 24 : 32;
-	int bx = X + f.w - 16 - cw, by = Y + (UCARD_H - ch) / 2;
+	if (f.hdr || f.bar) return { X, Y, X + f.cw, Y + 34 };
+	int cw = f.cw, ch = f.kind == fToggle ? 24 : 32;
+	int bx = X + f.w - 16 - cw, by = Y + (f.ht - ch) / 2;
 	return { bx, by, bx + cw, by + ch };
+}
+
+// ---- layout: the settings pages are sections and rows, placed from their content, so nothing can overlap
+static HDC g_mdc = NULL;                                       // a DC just to measure text
+static int MeasureW(const std::string &s, HFONT f) { return UTextW(g_mdc, s, f); }
+static int HelpH(const std::string &s, int w) {                // height of a help text word-wrapped to w (96-dpi)
+	if (s.empty() || w < 20) return 0;
+	RECT r = { 0, 0, Px(w), 0 };
+	SelectObject(g_mdc, fSmall);
+	DrawTextA(g_mdc, s.c_str(), -1, &r, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX);
+	return (int)ceil(r.bottom * 96.0 / g_dpi);
+}
+// a choice with more than 3 options (the Style box once presets are added) is a dropdown, not side-by-side segments
+static std::vector<std::pair<std::string, std::string>> ChoiceOpts(const Field &f) {
+	std::vector<std::pair<std::string, std::string>> opts;
+	std::string list = ChoicesOf(f) + ";";
+	size_t a = 0, b;
+	while ((b = list.find(';', a)) != std::string::npos) {
+		std::string one = list.substr(a, b - a); a = b + 1;
+		size_t bar = one.find('|');
+		if (bar != std::string::npos) opts.push_back({ one.substr(0, bar), one.substr(bar + 1) });
+	}
+	return opts;
+}
+static bool IsDropdown(const Field &f) { return f.kind == fChoice && ChoiceOpts(f).size() > 3; }
+static int ControlW(const Field &f) {
+	if (f.want) return f.want;
+	if (IsDropdown(f)) {
+		int w = 0;
+		for (auto &o : ChoiceOpts(f)) w = std::max(w, MeasureW(o.second, fLabel));
+		return std::max(190, std::min(w + 64, 340));
+	}
+	switch (f.kind) {
+	case fToggle: return 46;
+	case fNum: return 104;
+	case fText: return 190;
+	case fColor: return 130;
+	case fChoice: {                                            // as wide as its options need (the Style box may list presets)
+		int w = 0;
+		std::string list = ChoicesOf(f) + ";";
+		size_t a = 0, b;
+		while ((b = list.find(';', a)) != std::string::npos) {
+			std::string one = list.substr(a, b - a); a = b + 1;
+			size_t bar = one.find('|');
+			if (bar != std::string::npos) w += MeasureW(one.substr(bar + 1), fLabel) + 30;
+		}
+		return std::max(170, std::min(w, 360));
+	}
+	default: return 150;
+	}
+}
+
+// camera chips: one chip per camera (number + name), then a + chip. Same ini values as before ("16, 19").
+struct ChipBox { int cam, kind; double x, y, w; };            // kind 0 a camera, 2 the + chip, 3 the "keeps the camera" note
+static const int CH_H = 26, CH_GAP = 6;
+static double ChipW(int cam, bool single) {
+	double bw = std::max(22, MeasureW(std::to_string(cam), fSection) + 10);
+	return 4 + bw + 8 + MeasureW(CamName(cam), fSmall) + (single ? 12 : 26);
+}
+static void ChipsLayout(const std::string &value, bool single, double W, std::vector<ChipBox> &out, int &H) {
+	out.clear();
+	double x = 0, y = 0;
+	std::vector<int> cams = IntList(value);
+	if (single && cams.size() > 1) cams.resize(1);
+	auto put = [&](int cam, int kind, double w) {
+		if (x > 0 && x + w > W) { x = 0; y += CH_H + CH_GAP; }
+		out.push_back({ cam, kind, x, y, w });
+		x += w + CH_GAP;
+	};
+	for (int c : cams) put(c, 0, ChipW(c, single));
+	if (!single || cams.empty()) put(0, 2, 30);
+	if (cams.empty() && !single) put(0, 3, MeasureW("keeps the current camera", fSmall) + 4);
+	H = (int)(y + CH_H);
+}
+static void ChipCell(const Field &f, int &cx, int &cy, int &cwid) {      // where a field's chips are drawn
+	cx = UCX + f.x + (f.cell ? 0 : 310); cy = UCY + f.y + (f.cell ? 0 : 12); cwid = f.cell ? f.w : f.w - 326;
+}
+
+static void FlowLayout() {
+	if (!g_mdc) return;
+	const int gap = 16, colW = (g_cw - gap) / 2;
+	for (int p = 0; p < PAGES; p++) if (p == pDirector || p == pBattles || p == pCameras || p == pReplays || p == pOverlays) g_pageEnd[p] = 0;
+	for (auto &f : g_fields) if (!f.hdr && !f.bar && !IsPick(f)) f.cw = ControlW(f);
+	int cp = -1, ct = -1, y = 0, left = -1;
+	auto flush = [&]() { if (left >= 0) { y += g_fields[left].ht + 10; left = -1; } };
+	auto endTab = [&]() { flush(); if (cp >= 0 && y > g_pageEnd[cp]) g_pageEnd[cp] = y; };
+	for (auto &it : g_items) {
+		if (it.page != cp || it.tab != ct) { endTab(); cp = it.page; ct = it.tab; y = TabCount(cp) ? 46 : 0; }
+		switch (it.type) {
+		case iSection:
+			flush();
+			if (y > (TabCount(cp) ? 46 : 0)) y += 12;
+			it.y = y; y += 28;
+			break;
+		case iField: {
+			Field &f = g_fields[it.field];
+			if (f.fixed) break;
+			if (f.full) { flush(); f.x = 0; f.w = g_cw; }
+			else if (left < 0) { f.x = 0; f.w = colW; }
+			else { f.x = colW + gap; f.w = colW; }
+			int textW = IsPick(f) ? 280 : f.w - f.cw - 44;
+			f.ht = std::max(UCARD_H, 36 + HelpH(f.help, textW) + 12);
+			if (IsPick(f)) {
+				std::vector<ChipBox> b; int H;
+				ChipsLayout(Raw(f.key), f.single, f.w - 326, b, H);
+				f.ht = std::max(f.ht, H + 24);
+			}
+			f.y = y;
+			if (f.full) y += f.ht + 10;
+			else if (left < 0) left = it.field;
+			else {
+				Field &l = g_fields[left];
+				int hh = std::max(l.ht, f.ht);
+				l.ht = f.ht = hh; f.y = l.y;
+				y = l.y + hh + 10; left = -1;
+			}
+			break;
+		}
+		case iBar: {
+			flush();
+			it.y = y;
+			int x = 100, line = 0;
+			for (int fi : it.fields) {
+				Field &f = g_fields[fi];
+				f.cw = MeasureW(f.choices, fLabel) + 32;
+				if (x + f.cw > g_cw - 14) { x = 100; line++; }
+				f.x = x; f.y = y + 11 + line * 44; x += f.cw + 8;
+			}
+			it.h = 56 + line * 44;
+			y += it.h + 10;
+			break;
+		}
+		case iCamTable: {
+			flush();
+			it.y = y;
+			int c = (g_cw - 190 - 14 - 16) / 2;
+			g_camX1 = 190; g_camX2 = 190 + c + 16;
+			g_camRowY.clear(); g_camRowH.clear();
+			int ry = y + 34;
+			size_t k = 0;
+			for (auto &r : CAM_ROWS) {
+				Field &a = g_fields[it.fields[k++]];
+				Field *b = r.follow ? &g_fields[it.fields[k++]] : nullptr;
+				std::vector<ChipBox> bx; int Ha = 0, Hb = 0;
+				ChipsLayout(Raw(a.key), false, c, bx, Ha);
+				if (b) ChipsLayout(Raw(b->key), false, c, bx, Hb);
+				int rowH = std::max({ 38, Ha + 14, Hb + 14 });
+				a.x = g_camX1; a.w = c; a.ht = Ha; a.y = ry + (rowH - Ha) / 2;
+				if (b) { b->x = g_camX2; b->w = c; b->ht = Hb; b->y = ry + (rowH - Hb) / 2; }
+				g_camRowY.push_back(ry); g_camRowH.push_back(rowH);
+				ry += rowH;
+			}
+			it.h = ry - y + 30;                                // room for the caption under the rows
+			y += it.h + 10;
+			break;
+		}
+		case iPreview: flush(); it.y = y; it.h = 166; y += it.h + 10; break;
+		case iReplayList: flush(); it.y = y; g_rlY = y; it.h = 44 + RL_ROWS * RL_ROW; y += it.h + 10; break;
+		case iReplayLog: flush(); it.y = y; g_rlogY = y; it.h = 248; y += it.h; break;
+		}
+	}
+	endTab();
+	for (auto &f : g_fields)                                   // buttons beside the page title
+		if (f.hdr) { f.cw = MeasureW(f.choices, fLabel) + 36; f.x = g_cw - f.cw; f.y = UHEAD + 22 - UCY; }
+}
+// after the width, a tab, or a camera list changed: place everything again
+static void Relayout() {
+	if (!g_ui) return;
+	FlowLayout();
+	for (auto &f : g_fields) {
+		if (!f.h || f.ctl < 0) continue;
+		RECT b = FieldBox(f);
+		Ctl &k = g_ctls[f.ctl];
+		if (f.kind == fNum || f.kind == fText) {
+			k.x = b.left + 9; k.y = b.top + 7; k.w = b.right - b.left - 18 - (f.unit.empty() ? 0 : 34); k.hgt = 19;
+		} else { k.x = b.left; k.y = b.top; k.w = b.right - b.left; k.hgt = b.bottom - b.top; }
+	}
+	PlaceCtls();
+	InvalidateRect(g_ui, NULL, FALSE);
+}
+
+// ---- the camera picker: a small window under the chips, cameras grouped by kind
+struct PickGroup { const char *name; int from, to; };
+static const PickGroup PICK_GROUPS[] = { { "ON-BOARD", 1, 3 }, { "CHASE", 4, 8 }, { "ON THE CAR", 10, 15 }, { "TV AND TRACK", 16, 21 }, { "RACEVISION OWN", 22, 99 } };
+struct PickChip { int cam; double x, y, w; };
+static HWND g_pick = NULL;
+static int g_pickField = -1;
+static const double PICK_W = 470;
+static void PickLayout(std::vector<PickChip> &out, std::vector<std::pair<std::string, double>> &heads, int &H) {
+	out.clear(); heads.clear();
+	double y = 46;
+	int last = std::min(CamLast(), 99);
+	for (auto &g : PICK_GROUPS) {
+		std::vector<int> cams;
+		for (int c = g.from; c <= std::min(g.to, last); c++) if (c != 9 && (c <= 21 || VCamById(c))) cams.push_back(c);
+		if (cams.empty()) continue;
+		heads.push_back({ g.name, y });
+		y += 18;
+		double x = 14;
+		for (int c : cams) {
+			double w = ChipW(c, true);
+			if (x > 14 && x + w > PICK_W - 14) { x = 14; y += CH_H + CH_GAP; }
+			out.push_back({ c, x, y, w });
+			x += w + CH_GAP;
+		}
+		y += CH_H + 12;
+	}
+	H = (int)y + 30;
+}
+static std::string JoinInts(const std::vector<int> &v) {
+	std::string s;
+	for (int c : v) s += (s.empty() ? "" : ", ") + std::to_string(c);
+	return s;
+}
+static void PickToggle(int cam) {
+	if (g_pickField < 0 || g_pickField >= (int)g_fields.size()) return;
+	Field &f = g_fields[g_pickField];
+	std::vector<int> v = IntList(Raw(f.key));
+	if (f.single) { Commit(f, std::to_string(cam)); if (g_pick) DestroyWindow(g_pick); return; }
+	auto it = std::find(v.begin(), v.end(), cam);
+	if (it != v.end()) v.erase(it); else v.push_back(cam);
+	Commit(f, JoinInts(v));
+	if (g_pick) InvalidateRect(g_pick, NULL, FALSE);
+}
+static void PaintPicker(HDC dc, int wpx, int hpx) {
+	int oy = g_oy; g_oy = 0;
+	double W = wpx * 96.0 / g_dpi, Hh = hpx * 96.0 / g_dpi;
+	URound(dc, 0, 0, W, Hh, 10, RGB(32, 36, 44), RGB(90, 98, 116));
+	if (g_pickField >= 0 && g_pickField < (int)g_fields.size()) {
+		Field &f = g_fields[g_pickField];
+		std::vector<int> cur = IntList(Raw(f.key));
+		UText(dc, "Cameras for: " + KeyLabel(f), 14, 12, W - 28, 22, fLabel, U_TEXT);
+		std::vector<PickChip> ch; std::vector<std::pair<std::string, double>> hd; int H;
+		PickLayout(ch, hd, H);
+		for (auto &h : hd) UText(dc, h.first, 14, h.second, 300, 16, fSection, U_MUTED);
+		for (auto &c : ch) {
+			bool sel = std::find(cur.begin(), cur.end(), c.cam) != cur.end(), ob = IsOnboard(c.cam);
+			URound(dc, c.x, c.y, c.w, CH_H, 7, sel ? RGB(58, 50, 18) : U_INPUT, sel ? U_GOLD : U_LINE);
+			double bw = std::max(22, MeasureW(std::to_string(c.cam), fSection) + 10);
+			URound(dc, c.x + 3, c.y + 3, bw, CH_H - 6, 4, ob ? U_GOLD : RGB(42, 46, 56));
+			UText(dc, std::to_string(c.cam), c.x + 3, c.y + 3, bw, CH_H - 6, fSection, ob ? U_INPUT : U_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			UText(dc, CamName(c.cam), c.x + 3 + bw + 8, c.y + 3, c.w - bw - 14, CH_H - 6, fSmall, U_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		UFill(dc, 14, Hh - 30, W - 28, 1, U_LINE);
+		UText(dc, std::string(f.single ? "Click a camera to choose it." : "Click a camera to add or remove it.") + "  Gold number = on-board.  Esc closes.",
+		      14, Hh - 24, W - 28, 18, fSmall, U_MUTED);
+	}
+	g_oy = oy;
+}
+static LRESULT CALLBACK PickProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+	switch (m) {
+	case WM_ERASEBKGND: return 1;
+	case WM_PAINT: {
+		PAINTSTRUCT ps; HDC dc = BeginPaint(h, &ps);
+		RECT rc; GetClientRect(h, &rc);
+		HDC mem = CreateCompatibleDC(dc);
+		HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom);
+		HGDIOBJ old = SelectObject(mem, bmp);
+		FillRect(mem, &rc, g_bgBrush);
+		PaintPicker(mem, rc.right, rc.bottom);
+		BitBlt(dc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY);
+		SelectObject(mem, old); DeleteObject(bmp); DeleteDC(mem);
+		EndPaint(h, &ps);
+		return 0;
+	}
+	case WM_LBUTTONDOWN: {
+		double x = (short)LOWORD(l) * 96.0 / g_dpi, y = (short)HIWORD(l) * 96.0 / g_dpi;
+		std::vector<PickChip> ch; std::vector<std::pair<std::string, double>> hd; int H;
+		PickLayout(ch, hd, H);
+		for (auto &c : ch) if (x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + CH_H) { PickToggle(c.cam); break; }
+		return 0;
+	}
+	case WM_SETCURSOR: SetCursor(LoadCursor(NULL, IDC_HAND)); return TRUE;
+	case WM_KEYDOWN: if (w == VK_ESCAPE) DestroyWindow(h); return 0;
+	case WM_ACTIVATE: if (LOWORD(w) == WA_INACTIVE) DestroyWindow(h); return 0;
+	case WM_DESTROY: if (g_pick == h) g_pick = NULL; return 0;
+	}
+	return DefWindowProc(h, m, w, l);
+}
+static void OpenPicker(int idx, POINT scr) {
+	if (g_pick) DestroyWindow(g_pick);
+	g_pickField = idx;
+	std::vector<PickChip> ch; std::vector<std::pair<std::string, double>> hd; int H;
+	PickLayout(ch, hd, H);
+	int w = Px(PICK_W), h = Px(H);
+	MONITORINFO mi = { sizeof mi };
+	GetMonitorInfo(MonitorFromPoint(scr, MONITOR_DEFAULTTONEAREST), &mi);
+	int x = std::max((int)mi.rcWork.left, std::min((int)scr.x, (int)mi.rcWork.right - w)), y = scr.y;
+	if (y + h > mi.rcWork.bottom) y = std::max((int)mi.rcWork.top, (int)mi.rcWork.bottom - h);
+	g_pick = CreateWindowExA(WS_EX_TOOLWINDOW, "RVPicker", "", WS_POPUP, x, y, w, h, g_ui, NULL, GetModuleHandle(NULL), NULL);
+	ShowWindow(g_pick, SW_SHOW);
+	SetForegroundWindow(g_pick);
+	SetFocus(g_pick);
+}
+// a click on the page: on a camera chip? (x, py = page coordinates, py counts the scroll)
+static bool ChipClick(int x, int py) {
+	for (size_t i = 0; i < g_fields.size(); i++) {
+		Field &f = g_fields[i];
+		if (!IsPick(f) || f.page != g_page || (f.tab >= 0 && f.tab != g_tab[g_page])) continue;
+		int cx, cy, cwid; ChipCell(f, cx, cy, cwid);
+		std::vector<ChipBox> bx; int H;
+		ChipsLayout(Raw(f.key), f.single, cwid, bx, H);
+		for (auto &b : bx) {
+			if (b.kind == 3 || x < cx + b.x || x >= cx + b.x + b.w || py < cy + b.y || py >= cy + b.y + CH_H) continue;
+			if (b.kind == 0 && !f.single && x >= cx + b.x + b.w - 20) {          // the x on a chip
+				std::vector<int> v = IntList(Raw(f.key));
+				auto it = std::find(v.begin(), v.end(), b.cam);
+				if (it != v.end()) v.erase(it);
+				Commit(f, JoinInts(v));
+				return true;
+			}
+			POINT p = { (LONG)((cx + b.x) * g_dpi / 96), (LONG)((cy + b.y + CH_H + 4 - g_scroll[g_page]) * g_dpi / 96) };
+			ClientToScreen(g_ui, &p);
+			OpenPicker((int)i, p);
+			return true;
+		}
+	}
+	return false;
 }
 
 // ---- settings: write, read back, and tell the main thread
@@ -393,6 +831,7 @@ static void Commit(Field &f, const std::string &value) {
 	if (!changed) return;
 	Log("-- setting %s = %s --\n", f.key.c_str(), v.c_str());
 	if (f.page == pOverlays) g_previewDirty = true;
+	if (IsPick(f)) Relayout();                                  // a longer or shorter list of chips changes the row height
 	InvalidateRect(g_ui, NULL, FALSE);
 	if (f.h && f.kind != fNum && f.kind != fText && f.kind != fCams) InvalidateRect(f.h, NULL, FALSE);
 }
@@ -501,6 +940,7 @@ static bool Same(const Field &f, const std::string &a, const std::string &b) {
 }
 static std::string ChoicesOf(const Field &f) { return f.key == "overlay_style" ? LayStyleChoices() : f.choices; }      // (the Style box also lists the style presets)
 static std::string ShowVal(const Field &f, const std::string &v) {
+	if (IsPick(f)) return CamList(v);
 	if (f.kind == fToggle) return atoi(v.c_str()) ? "on" : "off";
 	if (f.kind == fChoice) {
 		std::string ch = ChoicesOf(f);
@@ -510,7 +950,7 @@ static std::string ShowVal(const Field &f, const std::string &v) {
 	return v.empty() ? "(none)" : v;
 }
 static std::string KeyLabel(const Field &f) {
-	if (!f.label.empty()) return f.label;
+	if (!f.label.empty()) return f.unit.empty() ? f.label : f.label + " (" + f.unit + ")";
 	for (auto &r : CAM_ROWS) {
 		std::string k = std::string("cam_") + r.key;
 		if (f.key == k) return std::string(r.label) + " opens on";
@@ -606,6 +1046,7 @@ static void SyncControls() {
 		else InvalidateRect(f.h, NULL, FALSE);
 	}
 	g_syncing = false;
+	Relayout();                                           // camera chips may now be longer or shorter
 }
 // a name that works as a file name ("" when nothing is left of it)
 static std::string PresetName(const std::string &typed) {
@@ -733,13 +1174,13 @@ static void MakePreviews() {
 	LeaveCriticalSection(&g_lock);
 	g_previewDirty = false;
 }
-static void PaintPreviews(HDC dc) {
+static void PaintPreviews(HDC dc, int top) {
 	if (g_previewDirty) MakePreviews();
-	float x0 = UCX, y0 = UCY + 704, total = 0, gap = 16, hmax = 0;
+	float x0 = UCX, y0 = (float)top, total = 0, gap = 16, hmax = 0;
 	for (auto *b : g_prev) if (b) { total += b->GetWidth(); hmax = std::max(hmax, (float)b->GetHeight()); }
 	if (total <= 0) return;
-	float k = std::min({ (UCW - 2 * gap - 24) / total, 104.f / hmax, 0.6f });
-	URound(dc, x0, y0, UCW, hmax * k + 52, 10, RGB(46, 60, 74));
+	float k = std::min({ (g_cw - 2 * gap - 24) / total, 104.f / hmax, 0.6f });
+	URound(dc, x0, y0, g_cw, hmax * k + 52, 10, RGB(46, 60, 74));
 	Graphics gr(dc);
 	gr.SetSmoothingMode(SmoothingModeAntiAlias);
 	gr.SetInterpolationMode(InterpolationModeHighQualityBicubic);
@@ -759,18 +1200,50 @@ static void PaintPreviews(HDC dc) {
 // ---- painting
 static void PaintCard(HDC dc, int x, int y, int w, int h) { URound(dc, x, y, w, h, 10, U_CARD); }
 
-static void PaintField(HDC dc, const Field &f) {
-	int X = UCX + f.x, Y = UCY + f.y;
-	if (f.kind != fCams) {
-		PaintCard(dc, X, Y, f.w, UCARD_H);
-		RECT b = FieldBox(f);
-		int textW = b.left - X - 28;
-		UText(dc, f.label, X + 16, Y + 11, textW, 20, fLabel, U_TEXT);
-		UText(dc, f.help, X + 16, Y + 32, textW, 34, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS);
+static void PaintChips(HDC dc, const Field &f) {
+	int cx, cy, cwid; ChipCell(f, cx, cy, cwid);
+	std::vector<ChipBox> bx; int H;
+	ChipsLayout(Raw(f.key), f.single, cwid, bx, H);
+	for (auto &b : bx) {
+		double x = cx + b.x, y = cy + b.y;
+		if (b.kind == 3) { UText(dc, "keeps the current camera", x, y + 4, b.w + 40, 18, fSmall, U_MUTED); continue; }
+		if (b.kind == 2) {
+			URound(dc, x, y, b.w, CH_H, 7, U_INPUT, U_LINE);
+			UText(dc, "+", x, y + 2, b.w, 22, fLabel, U_MUTED, DT_CENTER | DT_TOP | DT_SINGLELINE);
+			continue;
+		}
+		bool ob = IsOnboard(b.cam);
+		URound(dc, x, y, b.w, CH_H, 7, U_INPUT, U_LINE);
+		double bw = std::max(22, MeasureW(std::to_string(b.cam), fSection) + 10);
+		URound(dc, x + 3, y + 3, bw, CH_H - 6, 4, ob ? U_GOLD : RGB(42, 46, 56));
+		UText(dc, std::to_string(b.cam), x + 3, y + 3, bw, CH_H - 6, fSection, ob ? U_INPUT : U_TEXT, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		UText(dc, CamName(b.cam), x + 3 + bw + 8, y + 3, b.w - bw - (f.single ? 18 : 34), CH_H - 6, fSmall, U_TEXT,
+		      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (!f.single) UText(dc, "\xD7", x + b.w - 20, y + 3, 16, CH_H - 6, fLabel, U_MUTED, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
-	if (f.kind == fNum || f.kind == fText || f.kind == fCams) {
-		RECT b = FieldBox(f);
+}
+
+static void PaintField(HDC dc, const Field &f) {
+	if (f.hdr || f.bar) return;
+	int X = UCX + f.x, Y = UCY + f.y;
+	if (IsPick(f)) {
+		if (!f.cell) {
+			PaintCard(dc, X, Y, f.w, f.ht);
+			UText(dc, f.label, X + 16, Y + 11, 280, 20, fLabel, U_TEXT);
+			UText(dc, f.help, X + 16, Y + 32, 280, f.ht - 34, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK);
+		}
+		PaintChips(dc, f);
+		return;
+	}
+	PaintCard(dc, X, Y, f.w, f.ht);
+	RECT b = FieldBox(f);
+	int textW = b.left - X - 28;
+	UText(dc, f.label, X + 16, Y + 11, textW, 20, fLabel, U_TEXT);
+	if (f.bad) UText(dc, "That is not a number. The last good value is still in use.", X + 16, Y + 32, textW, f.ht - 34, fSmall, U_RED, DT_LEFT | DT_TOP | DT_WORDBREAK);
+	else UText(dc, f.help, X + 16, Y + 32, textW, f.ht - 34, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK);
+	if (f.kind == fNum || f.kind == fText) {
 		URound(dc, b.left, b.top, b.right - b.left, b.bottom - b.top, 6, U_INPUT, f.bad ? U_RED : U_LINE);
+		if (!f.unit.empty()) UText(dc, f.unit, b.right - 33, b.top + 6, 30, 20, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_SINGLELINE);
 	}
 }
 
@@ -780,13 +1253,31 @@ static std::string CamList(const std::string &v) {
 	return out.empty() ? "keeps the camera" : out;
 }
 
-// ---- the Replays page: every crash this race (best first, click one to play it) and the replay log
-static const int RL_Y = 1006, RL_ROW = 34, RL_ROWS = 10, RLOG_Y = RL_Y + 52 + RL_ROWS * RL_ROW + 24;
+// the camera table: row names and lines; the chips are the rows' fields
+static void PaintCamTable(HDC dc, const Item &it) {
+	PaintCard(dc, UCX, UCY + it.y, g_cw, it.h);
+	UText(dc, "SHOT", UCX + 14, UCY + it.y + 12, 150, 16, fSection, U_MUTED);
+	UText(dc, "STARTS ON", UCX + g_camX1, UCY + it.y + 12, 150, 16, fSection, U_MUTED);
+	UText(dc, "THEN SWITCHES TO", UCX + g_camX2, UCY + it.y + 12, 200, 16, fSection, U_MUTED);
+	for (size_t r = 0; r < g_camRowY.size() && r < sizeof CAM_ROWS / sizeof CAM_ROWS[0]; r++) {
+		int y = UCY + g_camRowY[r], h = g_camRowH[r];
+		if (r > 0) UFill(dc, UCX + 14, y, g_cw - 28, 1, RGB(36, 40, 49));
+		UText(dc, CAM_ROWS[r].label, UCX + 14, y + (h - 20) / 2, g_camX1 - 24, 20, fLabel, U_TEXT);
+		if (!CAM_ROWS[r].follow) {
+			const char *k = CAM_ROWS[r].key;
+			UText(dc, !strcmp(k, "replay") ? "First angle. More angles: Replays page" : !strcmp(k, "pass_passed") ? "After the switch time, on the car that was passed" : "Follows the car along pit road",
+			      UCX + g_camX2, y + (h - 18) / 2, g_cw - g_camX2 - 14, 18, fSmall, U_MUTED);
+		}
+	}
+	UText(dc, "Gold number = on-board camera (gets the in-car dash).", UCX + 14, UCY + it.y + it.h - 24, g_cw - 28, 18, fSmall, U_MUTED);
+}
+
+// ---- the Replays page, This race tab: every crash this race (best first, click one to play it) and the replay log
 static std::vector<int> g_rlistIds;                      // the crash under each row, as last painted
-static void PaintReplays(HDC dc) {
+static void PaintReplayList(HDC dc) {
+	const int UCW = g_cw;                                // (the list is as wide as the window now)
 	struct Row { int id, lap, cars; double worth, damage, ago; bool replayed, playing, worthy; std::string who; int kind; };
 	std::vector<Row> rows;
-	std::vector<std::string> log;
 	EnterCriticalSection(&g_lock);
 	for (auto &c : g_crashes)
 		rows.push_back({ c.id, c.lap, (int)c.cars.size(), Worth(c), c.damage, std::max(0.0, g_simT - c.first), c.replayed,
@@ -795,16 +1286,15 @@ static void PaintReplays(HDC dc) {
 		rows.push_back({ c.id, c.lap, (int)c.cars.size(), Worth(c), 0, std::max(0.0, g_simT - c.first), c.replayed,
 		                 g_rp.phase && g_rp.crash == c.id, true, c.what + ":  " + CrashWho(c, 3), c.kind });
 	LeaveCriticalSection(&g_lock);
-	EnterCriticalSection(&g_logLock);
-	log = g_replayLog;
-	LeaveCriticalSection(&g_logLock);
 	std::stable_sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.worth > b.worth; });
+	const int RL_Y = g_rlY;
+	int cDamage = UCW - 284, cScore = UCW - 194, cPlay = UCW - 124;       // the right-hand columns follow the width
 	PaintCard(dc, UCX, UCY + RL_Y, UCW, 44 + RL_ROWS * RL_ROW);
 	UText(dc, "LAP", UCX + 16, UCY + RL_Y + 12, 50, 16, fSection, U_MUTED);
-	UText(dc, "CARS (THE REPLAY'S FIRST CAR FIRST)", UCX + 70, UCY + RL_Y + 12, 420, 16, fSection, U_MUTED);
-	UText(dc, "DAMAGE", UCX + 560, UCY + RL_Y + 12, 80, 16, fSection, U_MUTED);
-	UText(dc, "SCORE", UCX + 650, UCY + RL_Y + 12, 60, 16, fSection, U_MUTED);
-	UText(dc, "CLICK TO PLAY", UCX + 720, UCY + RL_Y + 12, 120, 16, fSection, U_MUTED);
+	UText(dc, "CARS (THE REPLAY'S FIRST CAR FIRST)", UCX + 70, UCY + RL_Y + 12, cDamage - 80, 16, fSection, U_MUTED);
+	UText(dc, "DAMAGE", UCX + cDamage, UCY + RL_Y + 12, 80, 16, fSection, U_MUTED);
+	UText(dc, "SCORE", UCX + cScore, UCY + RL_Y + 12, 60, 16, fSection, U_MUTED);
+	UText(dc, "CLICK TO PLAY", UCX + cPlay, UCY + RL_Y + 12, 120, 16, fSection, U_MUTED);
 	g_rlistIds.clear();
 	if (rows.empty()) UText(dc, "No crashes or highlights logged this race yet.", UCX + 16, UCY + RL_Y + 48, 500, 20, fLabel, U_MUTED);
 	for (size_t i = 0; i < rows.size() && (int)i < RL_ROWS; i++) {
@@ -815,20 +1305,49 @@ static void PaintReplays(HDC dc) {
 		COLORREF tc = r.worthy ? U_TEXT : U_MUTED;
 		UText(dc, std::to_string(r.lap), UCX + 16, y + 7, 50, 20, fLabel, tc);
 		std::string who = r.kind ? r.who : r.who + "  (" + std::to_string(r.cars) + (r.cars == 1 ? " car)" : " cars)");
-		UText(dc, who, UCX + 70, y + 7, 480, 20, fLabel, tc, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+		UText(dc, who, UCX + 70, y + 7, cDamage - 80, 20, fLabel, tc, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
 		char b[32];
 		if (r.kind) snprintf(b, sizeof b, "-"); else snprintf(b, sizeof b, "%.2f", r.damage);
-		UText(dc, b, UCX + 560, y + 7, 80, 20, fLabel, tc);
-		snprintf(b, sizeof b, "%.1f", r.worth); UText(dc, b, UCX + 650, y + 7, 60, 20, fLabel, r.worthy ? U_GOLD : U_MUTED);
+		UText(dc, b, UCX + cDamage, y + 7, 80, 20, fLabel, tc);
+		snprintf(b, sizeof b, "%.1f", r.worth); UText(dc, b, UCX + cScore, y + 7, 60, 20, fLabel, r.worthy ? U_GOLD : U_MUTED);
 		std::string st = r.playing ? "ON NOW" : r.replayed ? "shown" : r.worthy ? "play" : "play (minor)";
-		UText(dc, st, UCX + 720, y + 7, 120, 20, fLabel, r.playing ? U_GOLD : r.replayed ? U_MUTED : U_GREEN);
+		UText(dc, st, UCX + cPlay, y + 7, 110, 20, fLabel, r.playing ? U_GOLD : r.replayed ? U_MUTED : U_GREEN);
 	}
-	UText(dc, "REPLAY LOG", UCX, UCY + RLOG_Y, 400, 20, fSection, U_GOLD);
-	PaintCard(dc, UCX, UCY + RLOG_Y + 26, UCW, 248);
+}
+static void PaintReplayLog(HDC dc) {
+	std::vector<std::string> log;
+	EnterCriticalSection(&g_logLock);
+	log = g_replayLog;
+	LeaveCriticalSection(&g_logLock);
+	PaintCard(dc, UCX, UCY + g_rlogY, g_cw, 248);
 	int n = (int)log.size(), first = std::max(0, n - 11);
-	if (!n) UText(dc, "Replays and crashes worth a replay show here.", UCX + 16, UCY + RLOG_Y + 40, 600, 20, fSmall, U_MUTED);
+	if (!n) UText(dc, "Replays and crashes worth a replay show here.", UCX + 16, UCY + g_rlogY + 14, 600, 20, fSmall, U_MUTED);
 	for (int k = first; k < n; k++)
-		UText(dc, log[k], UCX + 16, UCY + RLOG_Y + 38 + (k - first) * 20, UCW - 32, 18, fSmall, U_TEXT, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+		UText(dc, log[k], UCX + 16, UCY + g_rlogY + 12 + (k - first) * 20, g_cw - 32, 18, fSmall, U_TEXT, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
+// the tab strip under the page title
+static void TabRect(int p, int t, int &x, int &w) {
+	x = UCX;
+	for (int i = 0; i <= t; i++) {
+		w = MeasureW(TabName(p, i), fLabel) + 32 + (p == pCameras && i == 2 ? 46 : 0);
+		if (i < t) x += w;
+	}
+}
+static void PaintTabs(HDC dc) {
+	int n = TabCount(g_page);
+	if (!n) return;
+	UFill(dc, UCX, UCY + 35, g_cw, 1, U_LINE);
+	for (int t = 0; t < n; t++) {
+		int x, w; TabRect(g_page, t, x, w);
+		bool sel = t == g_tab[g_page];
+		UText(dc, TabName(g_page, t), x + 16, UCY + 8, w, 22, fLabel, sel ? U_TEXT : U_MUTED);
+		if (g_page == pCameras && t == 2) {
+			URound(dc, x + 16 + MeasureW(TabName(g_page, t), fLabel) + 8, UCY + 9, 38, 18, 9, RGB(20, 52, 54));
+			UText(dc, "TEST", x + 16 + MeasureW(TabName(g_page, t), fLabel) + 8, UCY + 10, 38, 16, fSection, U_TEAL, DT_CENTER | DT_TOP | DT_SINGLELINE);
+		}
+		if (sel) UFill(dc, x + 6, UCY + 33, w - 12, 3, U_GOLD);
+	}
 }
 
 static void PaintPageBody(HDC dc);
@@ -839,9 +1358,27 @@ static void PaintPage(HDC dc) {
 }
 static void PaintPageBody(HDC dc) {
 	UText(dc, PageName[g_page], UCX, UHEAD + 18, 600, 34, fH1, U_TEXT);
-	UText(dc, PageSub[g_page], UCX, UHEAD + 52, UCW, 20, fSmall, U_MUTED);
-	for (auto &s : SECTIONS) if (s.page == g_page) UText(dc, s.text, UCX, UCY + s.y, 400, 20, fSection, U_GOLD);
+	UText(dc, PageSub[g_page], UCX, UHEAD + 52, g_page == pLive || g_page == pArt || g_page == pPresets || g_page == pPhone ? UCW : g_cw, 20, fSmall, U_MUTED);
+	PaintTabs(dc);
 	const Snap &n = g_snap;
+	for (auto &it : g_items) {                                   // the settings pages: titles and hand-drawn blocks
+		if (it.page != g_page || it.tab != g_tab[g_page]) continue;
+		switch (it.type) {
+		case iSection:
+			UText(dc, it.text, UCX, UCY + it.y, 400, 20, fSection, U_GOLD);
+			if (*it.sub.c_str()) UText(dc, it.sub, UCX + MeasureW(it.text, fSection) + 14, UCY + it.y + 1, g_cw - MeasureW(it.text, fSection) - 14, 18, fSmall, U_MUTED);
+			break;
+		case iBar: {
+			PaintCard(dc, UCX, UCY + it.y, g_cw, it.h);
+			UText(dc, it.text, UCX + 16, UCY + it.y + 20, 80, 16, fSection, U_MUTED);
+			break;
+		}
+		case iCamTable: PaintCamTable(dc, it); break;
+		case iPreview: PaintPreviews(dc, UCY + it.y); break;
+		case iReplayList: PaintReplayList(dc); break;
+		case iReplayLog: PaintReplayLog(dc); break;
+		}
+	}
 	if (g_page == pLive) {
 		const char *heads[4] = { "ON SCREEN", "CAMERA", "RACE", "TRACK" };
 		std::string vals[4], subs[4];
@@ -866,38 +1403,24 @@ static void PaintPageBody(HDC dc) {
 			UText(dc, subs[i], x + 16, UCY + 60, cw - 32, 18, fSmall, sc);
 		}
 		PaintCard(dc, UCX, UCY + 100, 300, 460);
-		UText(dc, "FIELD", UCX + 16, UCY + 112, 200, 16, fSection, U_MUTED);
+		UText(dc, "FIELD", UCX + 16, UCY + 112, 100, 16, fSection, U_MUTED);
+		UText(dc, "Double-click a car: show it on TV", UCX + 70, UCY + 113, 214, 16, fSmall, U_MUTED, DT_RIGHT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
 		PaintCard(dc, UCX + 316, UCY + 100, UCW - 316, 460);
 		UText(dc, "LOG", UCX + 332, UCY + 112, 200, 16, fSection, U_MUTED);
-		UText(dc, "Ctrl+F9 overlays   Ctrl+F10 move overlays   Ctrl+F11 pause   Ctrl+F12 quit", UCX, UCY + 578, 540, 20, fSmall, U_MUTED);
-	}
-	if (g_page == pCameras) {
-		PaintCard(dc, UCX, UCY + 26, 544, 532);
-		UText(dc, "SHOT", UCX + 16, UCY + 40, 150, 16, fSection, U_MUTED);
-		UText(dc, "OPENS ON", UCX + 180, UCY + 40, 150, 16, fSection, U_MUTED);
-		UText(dc, "THEN FOLLOWS WITH", UCX + 330, UCY + 40, 200, 16, fSection, U_MUTED);
-		for (int r = 0; r < (int)(sizeof CAM_ROWS / sizeof CAM_ROWS[0]); r++) {
-			int y = UCY + 64 + r * 37;
-			UText(dc, CAM_ROWS[r].label, UCX + 16, y + 7, 160, 20, fLabel, U_TEXT);
-			if (!CAM_ROWS[r].follow) UText(dc, !strcmp(CAM_ROWS[r].key, "replay") ? "first angle (more: Replays)" : !strcmp(CAM_ROWS[r].key, "pass_passed") ? "after follow_after: on the car passed" : "follows the car along pit road", UCX + 330, y + 8, 200, 20, fSmall, U_MUTED);
+		// the keys, as chips
+		struct { const char *key, *what; } keys[] = { { "Ctrl+F9", "overlays on / off" }, { "Ctrl+F10", "move overlays" }, { "Ctrl+F11", "pause" }, { "Ctrl+F12", "quit" } };
+		double kx = UCX;
+		for (auto &k : keys) {
+			int kw = MeasureW(k.key, fSection) + 16, ww = MeasureW(k.what, fSmall);
+			URound(dc, kx, UCY + 574, kw, 24, 6, U_INPUT, U_LINE);
+			UText(dc, k.key, kx, UCY + 578, kw, 18, fSection, U_TEXT, DT_CENTER | DT_TOP | DT_SINGLELINE);
+			UText(dc, k.what, kx + kw + 8, UCY + 577, ww + 4, 18, fSmall, U_MUTED);
+			kx += kw + 8 + ww + 28;
 		}
-		// the legend, and what the lists say in words for the row under the mouse... kept simple: all of them
-		PaintCard(dc, UCX + 560, UCY + 26, 284, 532);
-		UText(dc, "CAMERA NUMBERS", UCX + 576, UCY + 40, 200, 16, fSection, U_MUTED);
-		for (int c = 1; c <= std::min(CamLast(), 30); c++) {
-			if (c > 21 && !VCamById(c)) continue;
-			int col = (c - 1) / 15, row = (c - 1) % 15;
-			int x = UCX + 576 + col * 134, y = UCY + 64 + row * 30;
-			bool on = IsOnboard(c);
-			URound(dc, x, y, 26, 22, 5, on ? U_GOLD : U_INPUT, on ? CLR_INVALID : U_LINE);
-			UText(dc, std::to_string(c), x, y + 2, 26, 18, fLabel, on ? U_INPUT : U_TEXT, DT_CENTER | DT_TOP | DT_SINGLELINE);
-			UText(dc, CamName(c), x + 32, y + 3, 100, 18, fSmall, c == 9 ? U_MUTED : U_TEXT);
-		}
-		UText(dc, "Gold = on-board. 22 and up: RaceVision's own (phone: Cameras, Adjust).", UCX + 576, UCY + 516, 260, 36, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK);
 	}
-	if (g_page == pOverlays) PaintPreviews(dc);
-	if (g_page == pReplays) PaintReplays(dc);
 	if (g_page == pArt) {
+		UText(dc, "ART FOLDERS", UCX, UCY, 400, 20, fSection, U_GOLD);
+		UText(dc, "SERIES", UCX, UCY + 262, 400, 20, fSection, U_GOLD);
 		PaintCard(dc, UCX, UCY + 26, UCW, 220);
 		UText(dc, "RaceVision looks in each folder for series\\<id>\\numbers\\<n>.png, headshots\\<n>.png and colors.json.",
 		      UCX + 16, UCY + 38, UCW - 32, 20, fSmall, U_MUTED);
@@ -917,12 +1440,13 @@ static void PaintPageBody(HDC dc) {
 		      UCX + 360, UCY + 392, 460, 60, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK);
 	}
 	if (g_page == pPresets) {
+		UText(dc, "PRESETS", UCX, UCY, 400, 20, fSection, U_GOLD);
 		PaintCard(dc, UCX, UCY + 26, 404, 470);
 		UText(dc, "SAVE CURRENT SETTINGS", UCX + 420, UCY, 400, 20, fSection, U_GOLD);
 		PaintCard(dc, UCX + 420, UCY + 26, 424, 124);
-		UText(dc, "Preset name", UCX + 436, UCY + 38, 300, 20, fLabel, U_TEXT);
-		URound(dc, UCX + 436, UCY + 64, 392, 32, 6, U_INPUT, U_LINE);
-		UText(dc, "Saves the settings on every page but Art.", UCX + 436, UCY + 112, 250, 20, fSmall, U_MUTED);
+		UText(dc, "Save as", UCX + 436, UCY + 38, 300, 20, fLabel, U_TEXT);
+		URound(dc, UCX + 436, UCY + 64, 254, 32, 6, U_INPUT, U_LINE);
+		UText(dc, "Saves the settings on every page but Art.", UCX + 436, UCY + 112, 380, 20, fSmall, U_MUTED);
 		UText(dc, "WHAT LOADING IT CHANGES", UCX + 420, UCY + 170, 400, 20, fSection, U_GOLD);
 		PaintCard(dc, UCX + 420, UCY + 196, 424, 300);
 		int i = SelectedPreset();
@@ -936,6 +1460,7 @@ static void PaintPageBody(HDC dc) {
 		      UCX, UCY + 512, UCW, 40, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK);
 	}
 	if (g_page == pPhone) {
+		UText(dc, "PAIR A PHONE", UCX, UCY, 400, 20, fSection, U_GOLD);
 		EnterCriticalSection(&g_lock);
 		std::vector<std::vector<bool>> qr = g_remoteQr;
 		std::string url = g_remoteUrl, note = g_remoteNote, fw = g_remoteFirewall, tail = g_remoteTail;
@@ -979,26 +1504,39 @@ static void PaintPageBody(HDC dc) {
 			UText(dc, phones[i].first, UCX + 356, y, 260, 22, fBody, U_TEXT);
 			UText(dc, when, UCX + 620, y, 208, 22, fSmall, live ? U_GREEN : U_MUTED, DT_RIGHT | DT_TOP | DT_SINGLELINE);
 		}
-		UText(dc, "The phone has to be on the same network (Wi-Fi) as this PC, or on Tailscale (use the PC's 100.x address). On the phone, add the page to the home screen "
-		          "(Share menu on iPhone, browser menu on Android) to open it like an app: it remembers the code. If the app ever "
-		          "asks, type the pairing code.  " + fw,
-		      UCX, UCY + 480, UCW, 60, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK);
+		UText(dc, "The phone has to be on the same Wi-Fi as this PC, or on Tailscale (use the PC's 100.x address).", UCX, UCY + 476, UCW, 20, fSmall, U_MUTED);
+		UText(dc, "Add the page to the phone's home screen (Share menu on iPhone, browser menu on Android) to open it like an app. It remembers the code.", UCX, UCY + 496, UCW, 20, fSmall, U_MUTED);
+		UText(dc, "If the app asks for it, type the pairing code.", UCX, UCY + 516, UCW, 20, fSmall, U_MUTED);
+		if (!fw.empty()) UText(dc, fw, UCX, UCY + 536, UCW, 34, fSmall, U_MUTED, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS);
 		if (!tail.empty()) {                         // friends somewhere else can't scan this screen: send them the link
-			PaintCard(dc, UCX, UCY + 548, UCW, 56);
-			UText(dc, "FRIENDS ON TAILSCALE", UCX + 16, UCY + 556, 300, 16, fSection, U_GOLD, DT_LEFT | DT_TOP | DT_SINGLELINE);
-			UText(dc, tail, UCX + 16, UCY + 576, UCW - 300, 22, fBody, U_TEXT, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+			PaintCard(dc, UCX, UCY + 576, UCW, 56);
+			UText(dc, "FRIENDS ON TAILSCALE", UCX + 16, UCY + 584, 300, 16, fSection, U_GOLD, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			UText(dc, tail, UCX + 16, UCY + 604, UCW - 300, 22, fBody, U_TEXT, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
 			bool copied = Now() - g_tailCopiedAt < 3;
-			UText(dc, copied ? "Copied" : "Click to copy, then send it to them", UCX + UCW - 300, UCY + 566, 284, 22, fSmall,
+			UText(dc, copied ? "Copied" : "Click to copy, then send it to them", UCX + UCW - 300, UCY + 594, 284, 22, fSmall,
 			      copied ? U_GREEN : U_MUTED, DT_RIGHT | DT_TOP | DT_SINGLELINE);
 		}
 	}
-	for (auto &f : g_fields) if (f.page == g_page) PaintField(dc, f);
+	for (auto &f : g_fields) if (f.page == g_page && (f.tab < 0 || f.tab == g_tab[g_page])) PaintField(dc, f);
 }
 
+// the side bar: a heading before each group, one row per page
+static int NavY(int p) {
+	int y = UHEAD + 10;
+	for (int q = 0; q <= p; q++) {
+		if (PageGroup[q]) y += q ? 30 : 20;
+		if (q == p) return y;
+		y += 34;
+	}
+	return y;
+}
+static const int NAV_H = 32;
+static int NavBottom() { return NavY(PAGES - 1) + NAV_H; }
+
 static void PaintChrome(HDC dc, int mx, int my) {
-	UFill(dc, 0, 0, UW, UHEAD, U_SIDE);
+	UFill(dc, 0, 0, g_uw, UHEAD, U_SIDE);
 	UFill(dc, 0, UHEAD, USIDE, g_uh - UHEAD, U_SIDE);
-	UFill(dc, 0, UHEAD - 1, UW, 1, RGB(30, 33, 40));
+	UFill(dc, 0, UHEAD - 1, g_uw, 1, RGB(30, 33, 40));
 	int lx = 24;
 	if (Bitmap *logo = LogoAt(Px(52))) {
 		Graphics gr(dc);
@@ -1010,14 +1548,15 @@ static void PaintChrome(HDC dc, int mx, int my) {
 	UText(dc, "VISION", lx + w, 13, 200, 40, fTitle, U_GOLD);
 	UText(dc, "NR2003 TV DIRECTOR", lx + w + UTextW(dc, "VISION", fTitle) + 14, 27, 200, 18, fSection, U_MUTED);
 	for (int p = 0; p < PAGES; p++) {
-		int y = UHEAD + 16 + p * 44;
-		bool sel = p == g_page, hot = mx >= 0 && mx < USIDE && my >= y && my < y + 40;
-		if (sel || hot) URound(dc, 10, y, USIDE - 20, 40, 8, sel ? U_CARD : RGB(19, 21, 27));
-		if (sel) URound(dc, 10, y + 10, 4, 20, 2, U_GOLD);
-		UText(dc, PageName[p], 30, y + 10, 150, 22, fNav, sel ? U_TEXT : U_MUTED);
+		int y = NavY(p);
+		if (PageGroup[p]) UText(dc, PageGroup[p], 20, y - (p ? 22 : 16), 150, 16, fSection, U_MUTED);
+		bool sel = p == g_page, hot = mx >= 0 && mx < USIDE && my >= y && my < y + NAV_H;
+		if (sel || hot) URound(dc, 10, y, USIDE - 20, NAV_H, 8, sel ? U_CARD : RGB(19, 21, 27));
+		if (sel) URound(dc, 10, y + 8, 4, NAV_H - 16, 2, U_GOLD);
+		UText(dc, PageName[p], 30, y + 5, 150, 22, fNav, sel ? U_TEXT : U_MUTED);
 	}
 	const Snap &n = g_snap;
-	int y = g_uh - 150;
+	int y = g_uh - 120;
 	UText(dc, "STATUS", 28, y, 150, 16, fSection, U_MUTED);
 	struct { const char *label; std::string val; COLORREF c; } rows[] = {
 		{ "NR2003", n.attached ? "connected" : "waiting", n.attached ? U_GREEN : U_MUTED },
@@ -1026,7 +1565,7 @@ static void PaintChrome(HDC dc, int mx, int my) {
 		{ "Session", !n.attached ? "-" : n.session == SESSION_RACE ? "race" : "not racing", n.attached && n.session == SESSION_RACE ? U_GREEN : U_MUTED },
 	};
 	for (int i = 0; i < 4; i++) {
-		int ry = y + 24 + i * 26;
+		int ry = y + 22 + i * 22;
 		UDot(dc, 28, ry + 5, 9, rows[i].c);
 		UText(dc, rows[i].label, 46, ry, 70, 20, fBody, U_MUTED);
 		UText(dc, rows[i].val, 110, ry, 80, 20, fBody, U_TEXT);
@@ -1061,6 +1600,7 @@ static void DrawButtonBody(DRAWITEMSTRUCT *d) {
 	bool onHeader = d->CtlID == ID_PAUSE || d->CtlID == ID_OVERLAYS || d->CtlID == ID_MOVE;
 	bool onCard = f || d->CtlID == ID_ADDFOLDER || d->CtlID == ID_REMOVEFOLDER || d->CtlID == ID_SAVEPRESET ||
 	              d->CtlID == ID_LOADPRESET || d->CtlID == ID_DELPRESET || d->CtlID == ID_PRESETFOLDER;
+	if (f && f->hdr) onCard = false;
 	COLORREF behind = onHeader ? U_SIDE : onCard ? U_CARD : U_BG;
 	HBRUSH bb = CreateSolidBrush(behind); FillRect(dc, &rc, bb); DeleteObject(bb);
 	bool down = (d->itemState & ODS_SELECTED) != 0, focus = (d->itemState & ODS_FOCUS) != 0;
@@ -1071,13 +1611,18 @@ static void DrawButtonBody(DRAWITEMSTRUCT *d) {
 		return;
 	}
 	if (f && f->kind == fChoice) {
-		std::vector<std::pair<std::string, std::string>> opts;
-		std::string list = ChoicesOf(*f) + ";";
-		size_t a = 0, b;
-		while ((b = list.find(';', a)) != std::string::npos) {
-			std::string one = list.substr(a, b - a); a = b + 1;
-			size_t bar = one.find('|');
-			if (bar != std::string::npos) opts.push_back({ one.substr(0, bar), one.substr(bar + 1) });
+		std::vector<std::pair<std::string, std::string>> opts = ChoiceOpts(*f);
+		if (opts.size() > 3) {                                  // dropdown: current choice + arrow
+			std::string cur = Raw(f->key), shown = cur;
+			for (auto &o : opts) if (_stricmp(cur.c_str(), o.first.c_str()) == 0) shown = o.second;
+			URound(dc, 0, 0, W, H, 6, U_INPUT, down ? U_GOLD : U_LINE);
+			UText(dc, shown, 12, 0, W - 40, H, fLabel, U_TEXT, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			double ax = W - 22, ay = H / 2 - 2;                 // little down arrow
+			POINT tri[3] = { { Px(ax), Px(ay) }, { Px(ax + 10), Px(ay) }, { Px(ax + 5), Px(ay + 5) } };
+			HBRUSH ab = CreateSolidBrush(U_GOLD); HPEN np = (HPEN)SelectObject(dc, GetStockObject(NULL_PEN)); HBRUSH ob = (HBRUSH)SelectObject(dc, ab);
+			Polygon(dc, tri, 3);
+			SelectObject(dc, ob); SelectObject(dc, np); DeleteObject(ab);
+			return;
 		}
 		URound(dc, 0, 0, W, H, 6, U_INPUT, U_LINE);
 		double sw = W / std::max<size_t>(1, opts.size());
@@ -1099,7 +1644,8 @@ static void DrawButtonBody(DRAWITEMSTRUCT *d) {
 	}
 	// plain button: gold when it shows a state that is on (paused, moving overlays)
 	char text[128]; GetWindowTextA(d->hwndItem, text, sizeof text);
-	bool active = (d->CtlID == ID_PAUSE && g_snap.paused) || ((d->CtlID == ID_MOVE || (f && f->key == "move")) && g_snap.edit);
+	bool active = (d->CtlID == ID_PAUSE && g_snap.paused) || ((d->CtlID == ID_MOVE || (f && f->key == "move")) && g_snap.edit) ||
+	              (f && f->key == "replay_now");              // the main replay button is gold
 	COLORREF fill = active ? U_GOLD : down ? RGB(44, 49, 60) : RGB(34, 38, 47);
 	URound(dc, 0, 0, W, H, 7, fill, focus && !active ? RGB(90, 98, 115) : CLR_INVALID);
 	if (d->CtlID == ID_OVERLAYS) UDot(dc, 14, H / 2 - 4, 8, g_snap.overlays ? U_GREEN : U_RED);
@@ -1243,17 +1789,16 @@ static LRESULT CALLBACK BtnProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
 // ---- page scrolling
 static int PageBottom(int p) {                   // where the page ends, with its bottom margin (96-dpi, unscrolled)
-	int b = UCY + PAGE_END[p];
-	for (auto &f : g_fields) if (f.page == p) b = std::max(b, UCY + f.y + (f.kind == fCams ? 32 : UCARD_H));
-	for (auto &c : g_ctls) if (c.page == p) b = std::max(b, c.y + c.hgt);
-	return b + 16;
+	return UCY + g_pageEnd[p] + 16;
 }
 static int MaxScroll(int p) { return std::max(0, PageBottom(p) - g_uh); }
+static bool CtlVisible(const Ctl &c) { return c.page < 0 || (c.page == g_page && (c.tab < 0 || c.tab == g_tab[g_page])); }
 // the page's controls follow the scroll: one sliding under the header is cut off there, one out of sight is hidden
 static void PlaceCtls() {
 	int oy = g_scroll[g_page];
 	for (auto &c : g_ctls) {
 		if (c.page < 0 || c.page != g_page) continue;
+		if (c.tab >= 0 && c.tab != g_tab[g_page]) { ShowWindow(c.h, SW_HIDE); continue; }       // another tab's control
 		int y = c.y - oy;
 		bool gone = y + c.hgt <= UHEAD || y >= g_uh, clip = !gone && y < UHEAD;
 		SetWindowPos(c.h, NULL, Px(c.x), Px(y), Px(c.w), Px(c.hgt),
@@ -1303,7 +1848,7 @@ static RECT PageRc(int x, int y, int x2, int y2) {
 // ---- pages
 static void ShowPage(int p) {
 	g_page = p;
-	for (auto &c : g_ctls) ShowWindow(c.h, c.page < 0 || c.page == p ? SW_SHOW : SW_HIDE);
+	for (auto &c : g_ctls) ShowWindow(c.h, CtlVisible(c) ? SW_SHOW : SW_HIDE);
 	g_scroll[p] = std::min(g_scroll[p], MaxScroll(p));
 	PlaceCtls();
 	if (p == pArt) ReadArt();
@@ -1374,20 +1919,32 @@ static void Refresh() {
 		InvalidateRect(g_btnPause, NULL, FALSE); InvalidateRect(g_btnOverlays, NULL, FALSE); InvalidateRect(g_btnMove, NULL, FALSE);
 	}
 	// the status, the live cards and the art page's "in use" change by themselves
-	RECT side = { 0, Px(g_uh - 160), Px(USIDE), Px(g_uh) };
+	RECT side = { 0, Px(g_uh - 125), Px(USIDE), Px(g_uh) };
 	InvalidateRect(g_ui, &side, FALSE);
 	if (g_page == pLive) { RECT cards = PageRc(UCX, UCY, UCX + UCW, UCY + 90); InvalidateRect(g_ui, &cards, FALSE); }
 	if (g_page == pArt) { RECT a = PageRc(UCX + 350, UCY + 300, UCX + UCW, UCY + 380); InvalidateRect(g_ui, &a, FALSE); }
-	if (g_page == pReplays) { RECT a = PageRc(UCX, UCY + RL_Y, UCX + UCW, UCY + RLOG_Y + 280); InvalidateRect(g_ui, &a, FALSE); }
+	if (g_page == pReplays && g_tab[pReplays] == 0) { RECT a = PageRc(UCX, UCY + g_rlY, UCX + g_cw, UCY + g_rlogY + 260); InvalidateRect(g_ui, &a, FALSE); }
 	if (g_page == pPhone) {                                       // the code, the link and the phones list
 		RECT a = PageRc(UCX, UCY + 26, UCX + 304, UCY + 426), b = PageRc(UCX + 320, UCY + 356, UCX + UCW, UCY + 464);
-		RECT t = PageRc(UCX, UCY + 548, UCX + UCW, UCY + 604);
+		RECT t = PageRc(UCX, UCY + 576, UCX + UCW, UCY + 632);
 		InvalidateRect(g_ui, &a, FALSE); InvalidateRect(g_ui, &b, FALSE); InvalidateRect(g_ui, &t, FALSE);
 	}
 }
 
 static const UINT_PTR TIMER_REFRESH = 1, TIMER_COMMIT = 2;
 static int g_pendingEdit = -1, g_mouseX = -1, g_mouseY = -1;
+
+static int NavHit(int y) {                       // the page under a y in the side bar, or -1
+	for (int p = 0; p < PAGES; p++) if (y >= NavY(p) && y < NavY(p) + NAV_H) return p;
+	return -1;
+}
+
+static void PlaceHeader() {                      // the three buttons on the right of the header
+	int bx = g_uw - 24;
+	bx -= 140; MoveWindow(g_btnMove, Px(bx), Px(14), Px(140), Px(36), TRUE);
+	bx -= 150; MoveWindow(g_btnOverlays, Px(bx), Px(14), Px(140), Px(36), TRUE);
+	bx -= 170; MoveWindow(g_btnPause, Px(bx), Px(14), Px(160), Px(36), TRUE);
+}
 
 static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 	switch (m) {
@@ -1413,14 +1970,26 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 		if (g_dragBar >= 0) { DragBarTo(y); return 0; }
 		bool was = g_mouseX >= 0 && g_mouseX < USIDE, now = x < USIDE;
 		g_mouseX = x; g_mouseY = y;
-		if (was || now) { RECT r = { 0, Px(UHEAD), Px(USIDE), Px(UHEAD + 16 + PAGES * 44) }; InvalidateRect(h, &r, FALSE); }
+		if (was || now) { RECT r = { 0, Px(UHEAD), Px(USIDE), Px(NavBottom()) }; InvalidateRect(h, &r, FALSE); }
 		TRACKMOUSEEVENT t = { sizeof t, TME_LEAVE, h, 0 }; TrackMouseEvent(&t);
-		SetCursor(LoadCursor(NULL, now && y > UHEAD + 16 && y < UHEAD + 16 + PAGES * 44 ? IDC_HAND : IDC_ARROW));
+		bool hand = now && NavHit(y) >= 0;
+		if (!now) {                                                  // tabs and camera chips are clickable too
+			int py = y + g_scroll[g_page], n = TabCount(g_page);
+			if (n && py >= UCY && py < UCY + 36) for (int t = 0; t < n; t++) { int tx, tw; TabRect(g_page, t, tx, tw); if (x >= tx && x < tx + tw) hand = true; }
+			for (auto &f : g_fields) {
+				if (hand || !IsPick(f) || f.page != g_page || (f.tab >= 0 && f.tab != g_tab[g_page])) continue;
+				int cx, cy, cwid; ChipCell(f, cx, cy, cwid);
+				std::vector<ChipBox> bx; int H;
+				ChipsLayout(Raw(f.key), f.single, cwid, bx, H);
+				for (auto &b : bx) if (b.kind != 3 && x >= cx + b.x && x < cx + b.x + b.w && py >= cy + b.y && py < cy + b.y + CH_H) hand = true;
+			}
+		}
+		SetCursor(LoadCursor(NULL, hand ? IDC_HAND : IDC_ARROW));
 		return 0;
 	}
 	case WM_MOUSELEAVE: {
 		g_mouseX = g_mouseY = -1;
-		RECT r = { 0, Px(UHEAD), Px(USIDE), Px(UHEAD + 16 + PAGES * 44) }; InvalidateRect(h, &r, FALSE);
+		RECT r = { 0, Px(UHEAD), Px(USIDE), Px(NavBottom()) }; InvalidateRect(h, &r, FALSE);
 		return 0;
 	}
 	case WM_SETCURSOR:
@@ -1430,7 +1999,7 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 		int x = (int)(short)LOWORD(l) * 96 / g_dpi, y = (int)(short)HIWORD(l) * 96 / g_dpi;
 		SetFocus(h);
 		int top, len, ty, th;
-		if (x >= UW - 24 && y > UHEAD && ScrollBar(top, len, ty, th)) {
+		if (x >= g_uw - 24 && y > UHEAD && ScrollBar(top, len, ty, th)) {
 			g_dragBar = y >= ty && y < ty + th ? y - ty : th / 2;     // a click on the track jumps there
 			SetCapture(h);
 			DragBarTo(y);
@@ -1438,15 +2007,19 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 			return 0;
 		}
 		int py = y + g_scroll[g_page];                              // on the (scrolled) page
-		if (x < USIDE && y > UHEAD + 16) {
-			int p = (y - UHEAD - 16) / 44;
-			if (p >= 0 && p < PAGES) ShowPage(p);
+		if (x < USIDE) { int p = NavHit(y); if (p >= 0) ShowPage(p); }
+		else if (y > UHEAD && TabCount(g_page) && py >= UCY && py < UCY + 36) {
+			for (int t = 0; t < TabCount(g_page); t++) {
+				int tx, tw; TabRect(g_page, t, tx, tw);
+				if (x >= tx && x < tx + tw && t != g_tab[g_page]) { g_tab[g_page] = t; g_scroll[g_page] = 0; ShowPage(g_page); }
+			}
 		}
-		if (g_page == pReplays && x >= UCX && x < UCX + UCW && y > UHEAD && py >= UCY + RL_Y + 38) {
-			int r = (py - UCY - RL_Y - 38) / RL_ROW;
+		else if (y > UHEAD && ChipClick(x, py)) return 0;
+		if (g_page == pReplays && g_tab[pReplays] == 0 && x >= UCX && x < UCX + g_cw && y > UHEAD && py >= UCY + g_rlY + 38) {
+			int r = (py - UCY - g_rlY - 38) / RL_ROW;
 			if (r >= 0 && r < (int)g_rlistIds.size()) { g_reqReplayId = g_rlistIds[r]; Log("-- replay crash #%d (Replays page) --\n", g_rlistIds[r]); }
 		}
-		if (g_page == pPhone && x >= UCX && x < UCX + UCW && y > UHEAD && py >= UCY + 548 && py < UCY + 604) {
+		if (g_page == pPhone && x >= UCX && x < UCX + UCW && y > UHEAD && py >= UCY + 576 && py < UCY + 632) {
 			EnterCriticalSection(&g_lock);
 			std::string tail = g_remoteTail;
 			LeaveCriticalSection(&g_lock);
@@ -1464,10 +2037,14 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 		ScrollTo(g_scroll[g_page] - GET_WHEEL_DELTA_WPARAM(w) * 60 / WHEEL_DELTA);
 		return 0;
 	case WM_SIZE:
-		if (w != SIZE_MINIMIZED && HIWORD(l) > 0) {
+		if (w != SIZE_MINIMIZED && HIWORD(l) > 0 && LOWORD(l) > 0) {
 			g_uh = HIWORD(l) * 96 / g_dpi;
+			g_uw = std::max(UW, (int)LOWORD(l) * 96 / g_dpi);
+			g_cw = std::max(UCW, g_uw - USIDE - 2 * UPAD);
+			Relayout();
 			g_scroll[g_page] = std::min(g_scroll[g_page], MaxScroll(g_page));
 			PlaceCtls();
+			if (g_btnMove) PlaceHeader();
 			InvalidateRect(h, NULL, FALSE);
 		}
 		return 0;
@@ -1478,7 +2055,8 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 		RECT a = { 0, 0, Px(UW), Px(UH_MIN) }, b = { 0, 0, Px(UW), Px(tallest) };
 		DWORD st = (DWORD)GetWindowLong(h, GWL_STYLE);
 		AdjustWindowRect(&a, st, FALSE); AdjustWindowRect(&b, st, FALSE);
-		mm->ptMinTrackSize.x = mm->ptMaxTrackSize.x = a.right - a.left;
+		mm->ptMinTrackSize.x = a.right - a.left;
+		mm->ptMaxTrackSize.x = Px(3000) + (a.right - a.left - Px(UW));
 		mm->ptMinTrackSize.y = a.bottom - a.top;
 		mm->ptMaxTrackSize.y = b.bottom - b.top;
 		return 0;
@@ -1524,6 +2102,18 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 			if (code != BN_CLICKED) return 0;
 			if (f.kind == fToggle) Commit(f, atoi(Raw(f.key).c_str()) ? "0" : "1");
 			else if (f.kind == fChoice) {
+				if (IsDropdown(f)) {                                // list the options in a drop-down menu under the box
+					auto opts = ChoiceOpts(f);
+					std::string cur = Raw(f.key);
+					HMENU m = CreatePopupMenu();
+					for (size_t i = 0; i < opts.size(); i++)
+						AppendMenuA(m, MF_STRING | (_stricmp(cur.c_str(), opts[i].first.c_str()) == 0 ? MF_CHECKED : 0), 1 + i, opts[i].second.c_str());
+					RECT wr; GetWindowRect(f.h, &wr);
+					int pick = TrackPopupMenu(m, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN, wr.left, wr.bottom + 2, 0, h, NULL);
+					DestroyMenu(m);
+					if (pick > 0 && pick <= (int)opts.size()) Commit(f, opts[pick - 1].first);
+					return 0;
+				}
 				POINT pt; GetCursorPos(&pt); ScreenToClient(f.h, &pt);
 				RECT r; GetClientRect(f.h, &r);
 				std::vector<std::string> vals;
@@ -1630,7 +2220,7 @@ static LRESULT CALLBACK UiProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 	case WM_CLOSE: {
 		RECT r; GetWindowRect(h, &r);
 		if (!IsIconic(h)) {
-			char v[64]; snprintf(v, sizeof v, "%d, %d, %d", r.left, r.top, g_uh);
+			char v[64]; snprintf(v, sizeof v, "%d, %d, %d, %d", r.left, r.top, g_uh, g_uw);
 			EnterCriticalSection(&g_lock); SaveKey("window_pos", v); LeaveCriticalSection(&g_lock);
 		}
 		DestroyWindow(h);
@@ -1694,6 +2284,7 @@ static void CreateUi() {
 	fNav = font("Segoe UI Semibold", 15); fLabel = font("Segoe UI Semibold", 14); fBody = font("Segoe UI", 14);
 	fSmall = font("Segoe UI", 12.5); fSection = font("Bahnschrift SemiBold", 12.5); fBig = font("Bahnschrift SemiBold", 21);
 	fMono = font("Consolas", 13); fInput = font("Segoe UI", 14);
+	g_mdc = CreateCompatibleDC(NULL);
 	g_inputBrush = CreateSolidBrush(U_INPUT); g_bgBrush = CreateSolidBrush(U_BG); g_cardBrush = CreateSolidBrush(U_CARD);
 
 	WNDCLASSA wc = {};
@@ -1705,14 +2296,18 @@ static void CreateUi() {
 	bc.lpfnWndProc = BtnProc; bc.hInstance = GetModuleHandle(NULL); bc.lpszClassName = "RVButton";
 	bc.hCursor = LoadCursor(NULL, IDC_HAND);
 	RegisterClassA(&bc);
+	WNDCLASSA pc = {};
+	pc.lpfnWndProc = PickProc; pc.hInstance = GetModuleHandle(NULL); pc.lpszClassName = "RVPicker";
+	pc.hCursor = LoadCursor(NULL, IDC_ARROW);
+	RegisterClassA(&pc);
 	DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_CLIPCHILDREN;
 	int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
 	EnterCriticalSection(&g_lock);
 	std::string pos = Raw("window_pos");
 	LeaveCriticalSection(&g_lock);
-	int px, py, ph = UH;
+	int px, py, ph = UH, pw = UW;
 	POINT at = { 0, 0 };
-	if (sscanf(pos.c_str(), "%d , %d , %d", &px, &py, &ph) >= 2) {
+	if (sscanf(pos.c_str(), "%d , %d , %d , %d", &px, &py, &ph, &pw) >= 2) {
 		RECT want = { px, py, px + 200, py + 60 };
 		if (MonitorFromRect(&want, MONITOR_DEFAULTTONULL)) { x = px; y = py; at = { px, py }; }
 	}
@@ -1727,7 +2322,10 @@ static void CreateUi() {
 		if (y != CW_USEDEFAULT && y + Px(g_uh) + (frame.bottom - frame.top) > mi.rcWork.bottom)
 			y = std::max((int)mi.rcWork.top, (int)((int)mi.rcWork.bottom - Px(g_uh) - (frame.bottom - frame.top)));
 	}
-	RECT r = { 0, 0, Px(UW), Px(g_uh) };
+	g_uw = std::max(UW, std::min(pw, 3000));
+	if (GetMonitorInfo(MonitorFromPoint(at, MONITOR_DEFAULTTOPRIMARY), &mi)) g_uw = std::max(UW, std::min(g_uw, (int)((mi.rcWork.right - mi.rcWork.left) * 96 / g_dpi)));
+	g_cw = std::max(UCW, g_uw - USIDE - 2 * UPAD);
+	RECT r = { 0, 0, Px(g_uw), Px(g_uh) };
 	AdjustWindowRect(&r, style, FALSE);
 	g_ui = CreateWindowExA(0, "RaceVisionWindow", "RaceVision", style, x, y, r.right - r.left, r.bottom - r.top, NULL, NULL,
 	                       GetModuleHandle(NULL), NULL);
@@ -1736,15 +2334,15 @@ static void CreateUi() {
 	DwmSetWindowAttribute(g_ui, 20, &dark, sizeof dark);         // DWMWA_USE_IMMERSIVE_DARK_MODE: dark title bar
 
 	// header buttons (every page)
-	int bx = UW - 24;
+	int bx = g_uw - 24;
 	bx -= 140; g_btnMove = MakeButton(ID_MOVE, -1, bx, 14, 140, 36, "Move overlays");
 	bx -= 150; g_btnOverlays = MakeButton(ID_OVERLAYS, -1, bx, 14, 140, 36, "Overlays on");
 	bx -= 170; g_btnPause = MakeButton(ID_PAUSE, -1, bx, 14, 160, 36, "Pause directing");
 	// live
 	g_lbField = MakeList(ID_FIELDLIST, pLive, UCX + 8, UCY + 134, 284, 418);
 	g_lbLog = MakeList(ID_LOG, pLive, UCX + 324, UCY + 134, UCW - 332, 418);
-	g_btnOpenLog = MakeButton(ID_OPENLOG, pLive, UCX + UCW - 130, UCY + 572, 130, 32, "Open log file");
-	g_btnCopy = MakeButton(ID_COPY, pLive, UCX + UCW - 250, UCY + 572, 110, 32, "Copy log");
+	g_btnOpenLog = MakeButton(ID_OPENLOG, pLive, UCX + UCW - 16 - 120, UCY + 104, 120, 28, "Open log file");
+	g_btnCopy = MakeButton(ID_COPY, pLive, UCX + UCW - 16 - 120 - 8 - 90, UCY + 104, 90, 28, "Copy log");
 	// art
 	g_lbFolders = MakeList(ID_FOLDERS, pArt, UCX + 8, UCY + 64, UCW - 16, 130);
 	g_btnAdd = MakeButton(ID_ADDFOLDER, pArt, UCX + 16, UCY + 202, 130, 32, "Add folder...");
@@ -1755,27 +2353,31 @@ static void CreateUi() {
 	MakeButton(ID_LOADPRESET, pPresets, UCX + 16, UCY + 446, 100, 32, "Load");
 	MakeButton(ID_DELPRESET, pPresets, UCX + 126, UCY + 446, 100, 32, "Delete");
 	MakeButton(ID_PRESETFOLDER, pPresets, UCX + 236, UCY + 446, 152, 32, "Open presets folder");
-	g_edPresetName = MakeCtl("EDIT", ES_AUTOHSCROLL | WS_TABSTOP, ID_PRESETNAME, pPresets, UCX + 445, UCY + 71, 374, 19);
+	g_edPresetName = MakeCtl("EDIT", ES_AUTOHSCROLL | WS_TABSTOP, ID_PRESETNAME, pPresets, UCX + 445, UCY + 71, 236, 19);
 	SendMessage(g_edPresetName, EM_SETLIMITTEXT, 60, 0);
-	MakeButton(ID_SAVEPRESET, pPresets, UCX + 698, UCY + 106, 130, 32, "Save preset");
+	MakeButton(ID_SAVEPRESET, pPresets, UCX + 700, UCY + 64, 128, 32, "Save preset");
 	g_lbDiffs = MakeList(ID_DIFFS, pPresets, UCX + 428, UCY + 252, 408, 236);
 	// settings
 	EnterCriticalSection(&g_lock);
 	g_artWas = S.artFolders + "|" + S.artSeries;
+	FlowLayout();
 	for (size_t i = 0; i < g_fields.size(); i++) {
 		Field &f = g_fields[i];
+		if (IsPick(f)) continue;                                  // camera chips are drawn and clicked by the window itself
 		RECT b = FieldBox(f);
 		int id = ID_FIELD0 + (int)i;
-		if (f.kind == fNum || f.kind == fText || f.kind == fCams) {
+		if (f.kind == fNum || f.kind == fText) {
 			std::string value = Raw(f.key);
 			if (value.empty() && f.key == "qual_handoff_m") value = "300";
 			if (value.empty() && f.key == "qual_close_ms") value = "150";
 			if (value.empty() && f.key == "qual_finish_pct") value = "30";
 			if (value.empty() && f.key == "qual_break_hold") value = "20";
-			f.h = MakeCtl("EDIT", ES_AUTOHSCROLL | WS_TABSTOP, id, f.page, b.left + 9, b.top + 7, b.right - b.left - 18, 19, value.c_str());
+			f.h = MakeCtl("EDIT", ES_AUTOHSCROLL | WS_TABSTOP, id, f.page, b.left + 9, b.top + 7, b.right - b.left - 18 - (f.unit.empty() ? 0 : 34), 19, value.c_str());
 		} else {
 			f.h = MakeButton(id, f.page, b.left, b.top, b.right - b.left, b.bottom - b.top, f.kind == fAction ? f.choices.c_str() : "");
 		}
+		f.ctl = (int)g_ctls.size() - 1;
+		g_ctls[f.ctl].tab = f.tab;
 	}
 	LeaveCriticalSection(&g_lock);
 	TakeSnap();

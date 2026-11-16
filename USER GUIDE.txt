@@ -1,5 +1,5 @@
-RaceVision v1.2.0 - TV director and broadcast overlays for NASCAR Racing 2003 Season
-==============================================================================
+RaceVision v2.0.0-beta1 - TV director and broadcast overlays for NASCAR Racing 2003 Season
+==========================================================================================
 
 RaceVision directs the TV view while you watch a race. It reads the race straight from
 NR2003's memory and cuts to the best thing happening: crashes, passes and close battles
@@ -7,36 +7,75 @@ for position, pit stops, the leader, restarts. It picks the camera for each shot
 shots long enough to watch them, and draws broadcast-style graphics over the game: a
 driver tag, a battle box and an in-car dash on on-board cameras.
 
-Please send racevision.log (next to the exe) with any problem report: it records every
-cut RaceVision made and why.
+THIS IS A BETA. The new overlay editor and the RaceControl overlays have had little time
+in live races. Please send racevision.log (next to the exe) with any problem report: it
+records every cut RaceVision made and why. The first line of the log names the version.
+
+
+WHAT'S NEW IN 2.0.0-beta1 (since 1.2.0)
+---------------------------------------
+Overlays are now data you design:
+- Overlay editor (browser): every overlay is a layout file made of text, multi-colour text,
+  boxes, pictures, driver portraits, bars, segmented bars, arcs, picture dials and needles.
+  Each element is bound to live data (driver, place, speed, RPM, gear, throttle, brake, last
+  and best lap, gap to the car ahead or the leader, battle gap, race story, any car by running
+  position, and more). PNG art and your own fonts work. Open it from the Overlays page
+  (Open layout editor) or the Director page. Drag elements, resize, align, group, lock, undo.
+- Screen view (the editor's front page): one place for the whole arrangement. For each slot
+  (tag, battle box, on-board gauges, in-car dash, RaceControl boards, four custom panels) pick
+  a layout, Automatic or Off, then drag it where you want it on a picture of your screen; the
+  mouse wheel resizes. Everything applies to the game straight away.
+- Presets: a preset holds which layout each slot uses, what is on or off, and every position
+  and size. Pick one in the Screen view to switch the whole look; Save / Save as keep your own.
+  Dash and Classic are still there as the two built-in looks. Mix and match overlays per preset.
+- Overlay pack: ready-made layouts and alternates (driver card, race bug, leaders ticker,
+  telemetry strip, pedals, dial gauge, NBC-style in-car bar) with their art, plus a pack of free fonts.
+  Copied into your layouts folder once, on first start; delete one and it stays deleted.
+- Director view page: collapsible Drivers / Cameras / Up next / Replays / Decisions panels and a
+  timeline with playback controls.
+
+RaceControl overlays (needs RaceControl 3.3.13 or newer):
+- RaceControl publishes its timing box, telemetry strip and choose-cone board as a data feed.
+  RaceVision draws them from your layouts: qualifying timing box, telemetry strip with the
+  order slide-in, cone board and a qualifying order ticker (starter layouts included, each
+  with an alternate).
+- They are four slots in the Screen view, off until you pick a layout. To use them, set
+  RaceControl's OverlaysDrawnBy to RaceVision, so it stops drawing its own copies. Each board
+  shows only while RaceControl says it should.
+- The ticker lists the cars in RaceControl's order list, so it shows as many cars as RaceControl
+  puts there.
+
+Fixes:
+- Phantom blowovers and 0.00-damage "crashes" on banked tracks. A car in a different lane to
+  last lap is several metres higher with no vertical speed, and was being called a flip. A flip
+  now also needs fast vertical movement (new setting blowover_vz, default 5 m/s; 0 = old rule).
+- The window's Style box is a drop-down when there are more than three styles.
+
+Known in this beta:
+- Not run in a full live race yet: the Screen view, the RaceControl boards and the layouts.
+- "STOPPED" crash entries with no damage can still appear for a car that simply stopped.
+- The crash alert and replay banner are not layouts yet and are not part of the Screen view.
 
 
 WHAT'S NEW IN 1.2.0 (since 1.1.0)
 --------------------------------
 - Lead battle hold: the director holds its view when cars are battling for the lead,
   so a door-to-door fight for first stays on screen instead of cutting away.
-
 - Configurable accent color: the plate fade color behind driver names (previously
   fixed teal) is now configurable as dash_accent2. Set it to your team's color or
   leave it at the default.
-
 - Per-driver dash colors: RaceVision picks each car's dash color from the art folder's
   colors.json, so each driver's in-car graphics use their own scheme.
-
 - In-car lens and angles apply live: adjustments to camera lens, angle, and position
   now take effect immediately without reloading.
-
 - Drone near clip fixed: the drone camera no longer clips through the track surface
   when looking straight down at close range.
-
 - Director view (browser): open :8090/director in a browser while RaceVision is
   running to see a timeline recorder for the director's cuts, with a track map,
   car positions, and the cut log updating live. Recordings save to
   %PROGRAMDATA%\NR2003 Companions\racevision\timelines.
-
 - Series art: team logo, driver headshot and number cards now appear on the track map,
   car list and director timeline in the desktop window.
-
 - Camera sets: swap whole sets of the game's own track and car cameras from the camsets folder (a menu, or the
   Cameras drawer in the director view). The first time a file is changed its original is saved, and the
   "stock" set puts it back. Presets for 14 tracks and a series set are included.
@@ -61,12 +100,16 @@ GETTING STARTED
 
 RaceVision needs nothing but NR2003 1.2.0.1. It works alongside AIMOD and RaceControl.
 
+Upgrading from 1.2.0: unzip over the old folder (keep your racevision.ini). New settings use their
+defaults until you change them.
+
 
 THE WINDOW
 - Live: what's on screen and why, the camera, the race and track, the running order
   (double-click a car to put it on TV yourself) and the director's log.
 - Director, Battles, Cameras: shot hold times, battle thresholds, camera assignments.
-- Overlays: which graphics show and when. The in-car dash shows on every on-board shot.
+- Overlays: which graphics show and when, the Style box, and the button that opens the
+  overlay editor. The in-car dash shows on every on-board shot.
 - Art: number cards, headshots and driver colours.
 - Presets: save and switch all settings. Presets are .ini files in the presets folder.
 - Phone: pair a phone to control RaceVision from it.
@@ -76,6 +119,20 @@ Keys (work anywhere, also while NR2003 has focus):
   Ctrl+F10  move the graphics (drag, mouse wheel to resize, Ctrl+F10 again to finish)
   Ctrl+F11  pause / resume directing
   Ctrl+F12  quit RaceVision
+
+
+THE OVERLAY EDITOR
+Open it from the Overlays page or the Director page; it needs the phone remote switched on.
+- Screen view (opens first): pick a preset at the top, choose a layout (or Off) for each slot
+  on the left, drag overlays on the screen picture, wheel to resize. Save writes into the
+  preset in use, Save as makes a new one. "Edit layouts" goes to the element editor, and each
+  slot has an Edit button that jumps to its layout.
+- Element editor: the picture is RaceVision's own drawing of the layout. Insert data puts a
+  {token} such as {car.last} or {rc.tele.mph} into text. Layouts are JSON files in the
+  layouts folder next to the exe and can be edited by hand.
+- RaceControl data is {rc.qual.*}, {rc.tele.*} and {rc.cone.*}. A layout's "when" can name one
+  (for example "rc.qual") so it shows only while that board is up.
+
 
 KNOWN LIMITS
 - Pit Exit High / Low cameras (30, 32 in JT's Customs) were built at Talladega_2023

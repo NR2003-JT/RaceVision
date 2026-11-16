@@ -579,7 +579,7 @@ static void Serve(SOCKET s, const std::string &ip) {
 	}
 	if (path == "/api/overlay" || path.rfind("/api/overlay/", 0) == 0) {       // overlay layouts (racevision_layout.cpp)
 		std::string sub = path.size() > 13 ? path.substr(13) : "";
-		bool post = sub == "save" || sub == "delete" || sub == "reset" || sub == "duplicate" || sub == "use" || sub == "upload" || sub == "render" || sub == "stylesave" || sub == "styleuse" || sub == "styledelete";
+		bool post = sub == "save" || sub == "delete" || sub == "reset" || sub == "duplicate" || sub == "use" || sub == "upload" || sub == "render" || sub == "stylesave" || sub == "styleuse" || sub == "styledelete" || sub == "panelpos";
 		if (post && method != "POST") { Reply(s, 400, JSON, Err("use POST")); return; }
 		int code = 200; std::string ctype;
 		std::string out = LayApi(sub, q, body, code, ctype);

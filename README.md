@@ -83,15 +83,25 @@ of elements.
   shows up in the editor's font list, which draws every font in its own face.
 - Editor helpers: grid lines and snap, pink alignment guides to the other elements and the overlay's edges and centre, teal
   distances to the edges, align buttons, drag-to-reorder layers, and dividers you can drag to resize the panels.
-- Styles: a style is a whole look, which layout each panel uses. The Style box on the Overlays page lists Dash, Classic and every
-  preset in `layouts\presets` (the editor's "Save current look as style" makes one). Picking a style clears the per-panel picks.
+- Screen view: the editor opens on it. Each slot (`tag`, `battle`, `onboard`, `dash`, `rc_qual`, `rc_tele`, `rc_cone`, `rc_order`,
+  `custom1`...`4`) gets a layout, Automatic or Off, and is dragged to where it should sit on a picture of the screen (wheel to
+  resize). Changes apply straight away through the ini keys `layout_<slot>` (`off` = switched off) and `overlay_<slot>`.
+- Presets: a preset (`layouts\presets\*.json`) holds `layouts` (the layout for each slot, or `off`) and `screen` (`[x, y, scale]`
+  for each slot). Picking one in the Screen view, or in the window's Style box, applies it. Dash and Classic stay as the two
+  built-in looks and only change the look, not positions. A preset without `screen` (the three shipped ones) only sets layouts.
 - Overlay pack: `layouts_stock\` (the RaceVision_* layouts, alternates, their art and three style presets) and `fontpack\` ship beside
   the exe; RaceVision copies what your layouts folder lacks into it once. `RaceVision_Overlay_Pack.zip` is that pack on its own.
 - Groups and locks: in the editor, Shift-click selects several elements; Group (Ctrl+G) makes them move together, Lock (Ctrl+L) pins
   them in place.
-- Where they show: the editor's "Where layouts show" (ini keys `layout_tag`, `layout_battle`, `layout_onboard`,
-  `layout_dash`, `layout_custom1`...`4`). A custom panel shows by its layout's `when` (`always`, `race`, `green`,
-  `onboard`, `offboard`, `battle`, `replay`; all words must hold). Move the panels on screen with Ctrl+F10 as before.
+- Where they show: the Screen view (ini keys `layout_tag`, `layout_battle`, `layout_onboard`, `layout_dash`,
+  `layout_custom1`...`4`, `layout_rc_*`). A custom or RaceControl panel shows by its layout's `when` (`always`, `race`, `green`,
+  `onboard`, `offboard`, `battle`, `replay`, `rc.qual`, `rc.tele`, `rc.cone`; all words must hold). Move the panels on screen with Ctrl+F10 as before.
+- RaceControl overlays: RaceControl 3.3.13+ writes `%PROGRAMDATA%\NR2003 Companions\racecontrol\overlay_feed.json` (about 4 reads a
+  second, ignored when `written_ms` is over 3 s old). Every field is a data source: `{rc.qual.pole_time}`, `{rc.tele.mph}`,
+  `{rc.tele.order.1.last}`, `{rc.cone.inside.1.num}` (lists count from 1). The four `rc_*` slots are off until a layout is picked; set
+  RaceControl's `OverlaysDrawnBy` to `RaceVision` so it doesn't draw its own. Starter layouts: `RaceVision_RC_*` in the pack.
+- Blowovers: a car must be both `blowover_m` above its line at that spot last lap and moving up or down at `blowover_vz` m/s within
+  the last 3 s. Without the second test, a car in another lane of a banked track looks like a flip.
 - Fonts (`.ttf`, `.otf`) go in `layouts\fonts` and are read when RaceVision starts. A hand-edited layout file is picked up
   within a second.
 

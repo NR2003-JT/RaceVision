@@ -1,0 +1,151 @@
+{
+    "title":  "RaceVision RC Telemetry Strip, compact dash style",
+    "panel":  "custom",
+    "w":  700,
+    "h":  80,
+    "when":  "rc.tele",
+    "accent":  "car",
+    "elements":  [
+                     {
+                         "name":  "Strip",
+                         "type":  "rect",
+                         "x":  0,
+                         "y":  0,
+                         "w":  700,
+                         "h":  80,
+                         "fill":  "#0b0d12ee",
+                         "radius":  6
+                     },
+                     {
+                         "name":  "Gold line",
+                         "type":  "rect",
+                         "x":  0,
+                         "y":  0,
+                         "w":  700,
+                         "h":  3,
+                         "fill":  "@gold"
+                     },
+                     {
+                         "name":  "Number",
+                         "type":  "text",
+                         "x":  12,
+                         "y":  12,
+                         "w":  80,
+                         "size":  44,
+                         "text":  "{rc.tele.num}",
+                         "color":  "@gold",
+                         "font":  "dash",
+                         "align":  "center",
+                         "bold":  true,
+                         "italic":  true
+                     },
+                     {
+                         "name":  "Name",
+                         "type":  "text",
+                         "x":  100,
+                         "y":  8,
+                         "w":  300,
+                         "size":  30,
+                         "text":  "{rc.tele.last}",
+                         "color":  "@white",
+                         "font":  "dash",
+                         "upper":  true,
+                         "bold":  true,
+                         "italic":  true
+                     },
+                     {
+                         "name":  "Track",
+                         "type":  "text",
+                         "x":  100,
+                         "y":  44,
+                         "w":  300,
+                         "size":  14,
+                         "text":  "{rc.tele.track}  {rc.tele.session}",
+                         "color":  "@grey",
+                         "upper":  true,
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  14,
+                         "w":  330,
+                         "y":  58,
+                         "type":  "run",
+                         "name":  "Laps",
+                         "x":  100,
+                         "parts":  [
+                                       {
+                                           "text":  "LAP {rc.tele.lap_no}/{rc.tele.laps_total}   ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "BEST ",
+                                           "color":  "@grey"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.best_lap}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "name":  "Speed",
+                         "type":  "text",
+                         "x":  410,
+                         "y":  6,
+                         "w":  130,
+                         "size":  46,
+                         "text":  "{rc.tele.mph:0}",
+                         "color":  "@white",
+                         "font":  "dash",
+                         "align":  "right",
+                         "bold":  true,
+                         "italic":  true,
+                         "show":  "rc.tele.tele_ok"
+                     },
+                     {
+                         "name":  "MPH",
+                         "type":  "text",
+                         "x":  546,
+                         "y":  28,
+                         "w":  40,
+                         "size":  14,
+                         "text":  "MPH",
+                         "color":  "@grey",
+                         "show":  "rc.tele.tele_ok",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "name":  "RPM",
+                         "type":  "segbar",
+                         "x":  410,
+                         "y":  56,
+                         "w":  270,
+                         "h":  14,
+                         "src":  "rc.tele.rpm_frac",
+                         "color":  "#ff8c1e",
+                         "track":  "#323640",
+                         "color2":  "#ff8c1e",
+                         "gap":  2,
+                         "segs":  22,
+                         "hot":  3,
+                         "hotColor":  "#eb3c28",
+                         "show":  "rc.tele.tele_ok"
+                     },
+                     {
+                         "name":  "Gear",
+                         "type":  "text",
+                         "x":  610,
+                         "y":  6,
+                         "w":  70,
+                         "size":  46,
+                         "text":  "{rc.tele.gear}",
+                         "color":  "@gold",
+                         "font":  "dash",
+                         "align":  "center",
+                         "bold":  true,
+                         "italic":  true,
+                         "show":  "rc.tele.tele_ok"
+                     }
+                 ]
+}

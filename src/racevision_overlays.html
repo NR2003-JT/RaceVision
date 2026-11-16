@@ -80,7 +80,7 @@ details.sec > summary .r { margin-left:auto; letter-spacing:.3px; text-transform
 .box.off { display:none; }
 .box.sel .h { position:absolute; width:9px; height:9px; background:var(--gold); border:1px solid #000; border-radius:2px; }
 .h.nw{left:-5px;top:-5px;cursor:nwse-resize}.h.n{left:calc(50% - 5px);top:-5px;cursor:ns-resize}.h.ne{right:-5px;top:-5px;cursor:nesw-resize}.h.e{right:-5px;top:calc(50% - 5px);cursor:ew-resize}.h.se{right:-5px;bottom:-5px;cursor:nwse-resize}.h.s{left:calc(50% - 5px);bottom:-5px;cursor:ns-resize}.h.sw{left:-5px;bottom:-5px;cursor:nesw-resize}.h.w{left:-5px;top:calc(50% - 5px);cursor:ew-resize}
-.f { display:grid; grid-template-columns:92px 1fr; gap:6px 8px; align-items:center; margin:7px 0; }
+.f { display:grid; grid-template-columns:92px minmax(0,1fr); gap:6px 8px; align-items:center; margin:7px 0; }
 .f > label { color:var(--muted); font-size:12.5px; }
 .f .row { display:flex; gap:5px; align-items:center; min-width:0; } .f .row > * { min-width:0; }
 .f .row input[type=text] { flex:1; }
@@ -88,6 +88,12 @@ details.sec > summary .r { margin-left:auto; letter-spacing:.3px; text-transform
 .f .row.wrap { flex-wrap:wrap; } .f .row.wrap > .row { flex:1 1 100%; }
 .hint { color:var(--dim); font-size:12px; margin:4px 0 8px; }
 .f .hint { grid-column:2; margin:0; }
+.f .row select { min-width:0; max-width:100%; text-overflow:ellipsis; }
+.f .row.ins { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; align-items:center; }
+.f .row.ins > .row { grid-column:1 / -1; display:grid; grid-template-columns:96px minmax(0,1fr); gap:6px; }
+.f .row.ins > .row select { width:100%; min-width:0; }
+.f .row.ins > select { width:100%; min-width:0; }
+.f .row.ins > button { width:auto; min-width:64px; padding:0 14px; justify-self:end; }
 hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
 .pt { border:1px solid var(--line); border-radius:8px; padding:7px; margin:6px 0; background:var(--card); }
 .badge { display:inline-block; padding:2px 7px; border-radius:5px; background:#2b2140; color:#cfb4ff; font-size:11.5px; font-weight:700; margin-left:4px; white-space:nowrap; }
@@ -117,6 +123,25 @@ hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
 #fontpop .fi { padding:5px 12px; font-size:20px; line-height:1.2; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #fontpop .fi:hover { background:#262b36; } #fontpop .fi.cur { color:var(--gold); }
 #fontpop .fi small { font:11px system-ui; color:var(--dim); margin-left:8px; }
 @media (max-width: 1000px) { main { grid-template-columns:1fr; grid-template-rows:auto 60vh auto; overflow:auto; } body { overflow:auto; height:auto; } .split { display:none; } }
+#screenView { position:fixed; left:0; right:0; bottom:0; top:52px; z-index:40; background:var(--bg); display:none; flex-direction:column; }
+.svbar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#0b0c10; border-bottom:1px solid #1e2128; flex-wrap:wrap; }
+.svbar b { font:700 15px var(--cond); letter-spacing:1.5px; color:var(--gold); text-transform:uppercase; }
+.svbody { flex:1; display:grid; grid-template-columns:380px minmax(0,1fr); min-height:0; }
+#svList { background:var(--panel); overflow:auto; padding:10px 12px 40px; border-right:1px solid var(--line); }
+#svList .grp { font:700 11.5px var(--cond); letter-spacing:1.4px; color:var(--muted); text-transform:uppercase; margin:12px 0 6px; }
+.svrow { background:var(--card); border:1px solid transparent; border-radius:9px; padding:7px 9px; margin:5px 0; }
+.svrow.sel { border-color:#4a5262; box-shadow:inset 3px 0 0 var(--gold); }
+.svrow.off { opacity:.62; }
+.svrow .t { display:flex; align-items:center; gap:8px; margin-bottom:5px; } .svrow .t b { flex:1; font-size:13.5px; }
+.svrow select { width:100%; }
+.svrow .xy { display:flex; gap:6px; margin-top:6px; align-items:center; font-size:12px; color:var(--muted); } .svrow .xy input { width:64px; }
+#svStageWrap { position:relative; overflow:auto; padding:12px; display:flex; align-items:flex-start; justify-content:center; background:#090a0d; }
+#svStage { position:relative; background:linear-gradient(135deg,#2c3a4c,#18212c 60%,#232b1e); border:1px solid #3a4150; flex:none; overflow:hidden; box-shadow:0 0 0 1px #000; }
+.svp { position:absolute; cursor:move; outline:1px dashed rgba(255,255,255,.35); touch-action:none; }
+.svp.sel { outline:2px solid var(--gold); z-index:5; }
+.svp img { width:100%; display:block; pointer-events:none; user-select:none; }
+.svp i { position:absolute; left:0; top:-17px; font:700 11px var(--cond); letter-spacing:.6px; background:rgba(0,0,0,.65); color:#cfd5e1; padding:1px 5px; border-radius:3px; white-space:nowrap; font-style:normal; pointer-events:none; }
+.svguide { position:absolute; background:var(--guide,#ff2d78); pointer-events:none; z-index:9; }
 </style>
 </head>
 <body>
@@ -127,6 +152,7 @@ hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
   <button class="hb" id="bSaveAs">Save as…</button>
   <button class="hb warn" id="bDelete">Delete</button>
   <button class="hb" id="bReset" title="Put the built-in layout back the way it came">Reset</button>
+  <button class="hb pri" id="bScreen" title="Choose which overlays show and drag them around the screen; save the arrangement as a preset">Screen</button>
   <span class="sp"></span>
   <span id="status" style="color:var(--muted);font-size:13px"></span>
   <button class="hb" id="bUndo" title="Ctrl+Z">Undo</button>
@@ -154,18 +180,11 @@ hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
       </div>
     </details>
     <details class="sec" open>
-      <summary>Style <span class="r" id="styleNow"></span></summary>
+      <summary>Where it shows</summary>
       <div class="secbody">
-        <div class="panelrow"><b>Style</b><select id="styleSel"></select></div>
-        <div class="grpbar"><button class="hb sm" id="bStyleSave" title="Save which layout each panel uses right now as a named style, and switch to it">Save current look as style…</button><button class="hb sm warn" id="bStyleDel">Delete style</button></div>
-        <div class="hint">A style is a whole look: which layout every panel uses. It is the Style box on RaceVision's Overlays page too, next to Dash and Classic. Choosing a style clears the per-panel picks below.</div>
-      </div>
-    </details>
-    <details class="sec" open>
-      <summary>Where layouts show</summary>
-      <div class="secbody">
-        <div id="panels"></div>
-        <div class="hint">Pick a layout for each overlay, or Automatic for RaceVision's own choice (the overlay style on the Overlays page). The Custom ones are yours: put a ticker or any layout there and set when it shows.</div>
+        <div class="hint" style="margin-top:0" id="usedBy"></div>
+        <div class="grpbar"><button class="hb sm pri" id="bToScreen">Open the Screen view</button></div>
+        <div class="hint">Which overlays show, where they sit and which preset is in use are all on the Screen view: one place for the whole arrangement.</div>
       </div>
     </details>
   </aside>
@@ -191,6 +210,21 @@ hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
     <div id="props"></div>
   </aside>
 </main>
+<div id="screenView">
+  <div class="svbar">
+    <b>Screen</b>
+    <select id="svPreset" title="Preset: a whole screen of overlays. Picking one switches to it."></select>
+    <span id="svDirty" style="color:var(--gold);font-size:12.5px;display:none">changed, not saved to the preset</span>
+    <button class="hb pri" id="svSave" title="Save what is below into this preset (layouts, on/off, positions, sizes)">Save</button>
+    <button class="hb" id="svSaveAs" title="Save what is below as a new preset">Save as…</button>
+    <button class="hb warn" id="svDel">Delete</button>
+    <label style="color:var(--muted);font-size:13px">Snap <select id="svSnap"><option value="0">off</option><option value="5">5 px</option><option value="10" selected>10 px</option><option value="20">20 px</option></select></label>
+    <span class="sp"></span>
+    <span class="hint" style="margin:0">Drag to move · mouse wheel to resize · changes apply to the overlay straight away</span>
+    <button class="hb" id="svClose">Edit layouts</button>
+  </div>
+  <div class="svbody"><div id="svList"></div><div id="svStageWrap"><div id="svStage"></div></div></div>
+</div>
 <div id="toast"></div>
 <div id="fontpop"></div>
 <div id="modal"><div class="card"><div class="mh"><h3 id="mTitle">Pick a picture</h3><input type="text" id="mSearch" placeholder="Search…" style="width:200px"><button class="hb" id="mUpload">Upload…</button><button class="hb" id="mClose">Close</button></div><div class="tabs" id="mTabs"></div><div class="mb" id="mBody"></div></div></div>
@@ -614,7 +648,7 @@ function mkSrc(obj, key, kinds, quiet) {
 }
 const mkWho = (obj, key, def) => mkSelect(obj, key, INFO.sources.whos, def || "car");
 function tokenInserter(target, obj, key) {
-  const w = document.createElement("div"); w.className = "row wrap"; w.style.flex = "1";
+  const w = document.createElement("div"); w.className = "row wrap ins"; w.style.flex = "1";
   const tmp = {};
   const pick = mkSrc(tmp, "s", null, true);
   const dec = document.createElement("select");
@@ -910,54 +944,147 @@ function drawMeta() {
   M.appendChild(field("Shows when", mkText(L, "when", { ph: "always" }), "Custom panels: words that must all hold: always race green onboard offboard battle replay"));
   const u = INFO.layouts.find(l => l.name === name);
   const hint = document.createElement("div"); hint.className = "hint";
-  hint.textContent = u && u.used ? "On screen as: " + u.used : "Not used by any overlay yet - pick it under Where layouts show.";
+  hint.textContent = u && u.used ? "On screen as: " + u.used : "Not used by any overlay yet - pick it on the Screen view.";
   M.appendChild(hint);
   M.appendChild(document.createElement("hr"));
 }
-function renderStyles() {
-  const sel = $("styleSel"), cur = INFO.style || "classic";
-  sel.innerHTML = '<option value="dash">Dash</option><option value="classic">Classic</option>' + (INFO.styles || []).map(x => `<option value="preset:${esc(x.name)}">${esc(x.title)}</option>`).join("");
-  sel.value = cur;
-  if (sel.value !== cur) sel.value = "classic";
-  $("bStyleDel").disabled = !cur.startsWith("preset:");
-  const t = sel.options[sel.selectedIndex];
-  $("styleNow").textContent = t ? t.textContent : "";
+function renderStyles() { if (SV.on) svPresets(); }
+// which slots draw the layout being edited (the Screen view does the choosing)
+function renderPanels() {
+  const u = $("usedBy");
+  if (!u || !INFO || !INFO.panels) return;
+  const on = INFO.panels.filter(p => p.using === name).map(p => p.label);
+  u.textContent = on.length ? "On screen as: " + on.join(", ") + "." : "Not used by any overlay right now.";
+  if (SV.on) svRender();
 }
-$("styleSel").onchange = async () => {
-  const v = $("styleSel").value;
-  if (!confirm("Switch the style? The per-panel layout picks below are cleared and the style's layouts take over.")) { renderStyles(); return; }
-  try { await call("styleuse", { name: v.replace(/^preset:/, "") }, ""); INFO = await call(""); fontCss(); renderStyles(); renderPanels(); toast("Style: " + $("styleSel").selectedOptions[0].textContent); }
-  catch (e) { toast(e.message, true); renderStyles(); }
+
+// ---------------------------------------------------------------- Screen view: which overlays show, and where (saved per preset)
+const SV = { on: false, sel: null, rev: 0 };
+const SV_GROUPS = [["Race overlays", ["tag", "battle", "onboard", "dash"]], ["RaceControl overlays", ["rc_qual", "rc_tele", "rc_cone", "rc_order"]], ["Custom overlays", ["custom1", "custom2", "custom3", "custom4"]]];
+function svZoom() { const w = $("svStageWrap"); return Math.max(0.1, Math.min((w.clientWidth - 26) / INFO.screenW, (w.clientHeight - 26) / INFO.screenH)); }
+async function svReload(bust) { INFO = await call(""); fontCss(); if (bust) SV.rev++; renderPanels(); renderStyles(); svRender(); }
+function svOpen() { SV.on = true; SV.rev++; $("screenView").style.top = document.querySelector("header").offsetHeight + "px"; $("screenView").style.display = "flex"; svRender(); }
+function svClose() { SV.on = false; $("screenView").style.display = "none"; }
+$("bScreen").onclick = async () => { try { INFO = await call(""); fontCss(); } catch (e) { toast(e.message, true); return; } svOpen(); };
+$("svClose").onclick = svClose;
+window.addEventListener("resize", () => { if (SV.on) svRender(); });
+function svPos(p, x, y, sc) {                                   // keep it on the screen, tell RaceVision
+  p.x = Math.round(x); p.y = Math.round(y); if (sc) p.scale = Math.round(sc * 100) / 100;
+  SV.dirty = true; svDirtyShow();
+  clearTimeout(p._t); p._t = setTimeout(() => call("panelpos", { panel: p.key, x: p.x, y: p.y, scale: p.scale }, "").catch(e => toast(e.message, true)), 120);
+}
+function svSnapGuides(p, nx, ny, z) {                           // snap the box to the grid, the screen's edges / centre, the other boxes
+  const snap = +$("svSnap").value, W = p.w * p.scale, H = p.h * p.scale, S = { x: INFO.screenW, y: INFO.screenH };
+  const xs = [0, S.x - W, (S.x - W) / 2], ys = [0, S.y - H, (S.y - H) / 2];
+  INFO.panels.forEach(o => { if (o === p || !o.using) return; xs.push(o.x, o.x + o.w * o.scale - W, o.x + o.w * o.scale, o.x - W); ys.push(o.y, o.y + o.h * o.scale - H, o.y + o.h * o.scale, o.y - H); });
+  const tol = 8 / z, gx = [], gy = [];
+  let bx = null, by = null;
+  xs.forEach(c => { if (Math.abs(c - nx) < tol && (bx === null || Math.abs(c - nx) < Math.abs(bx - nx))) bx = c; });
+  ys.forEach(c => { if (Math.abs(c - ny) < tol && (by === null || Math.abs(c - ny) < Math.abs(by - ny))) by = c; });
+  if (bx !== null) nx = bx; else if (snap) nx = Math.round(nx / snap) * snap;
+  if (by !== null) ny = by; else if (snap) ny = Math.round(ny / snap) * snap;
+  return { x: Math.max(-W + 20, Math.min(S.x - 20, nx)), y: Math.max(-H + 20, Math.min(S.y - 20, ny)), hx: bx, hy: by };
+}
+function svRender() {
+  if (!INFO || !INFO.screenW) return;
+  const z = svZoom(), st = $("svStage");
+  st.style.width = INFO.screenW * z + "px"; st.style.height = INFO.screenH * z + "px";
+  st.innerHTML = "";
+  INFO.panels.forEach(p => {
+    if (!p.using) return;
+    const d = document.createElement("div");
+    d.className = "svp" + (SV.sel === p.key ? " sel" : "");
+    d.style.cssText = `left:${p.x * z}px;top:${p.y * z}px;width:${p.w * p.scale * z}px`;
+    d.innerHTML = `<i>${esc(p.label)}</i><img src="${apiUrl("panelpng", { panel: p.key, v: SV.rev + p.using })}" alt="">`;
+    d.onpointerdown = ev => {
+      ev.preventDefault(); d.setPointerCapture(ev.pointerId); SV.sel = p.key;
+      st.querySelectorAll(".svp").forEach(e => e.classList.remove("sel")); d.classList.add("sel"); svList();
+      const sx = ev.clientX, sy = ev.clientY, ox = p.x, oy = p.y;
+      d.onpointermove = m => {
+        const r = svSnapGuides(p, ox + (m.clientX - sx) / z, oy + (m.clientY - sy) / z, z);
+        p.x = Math.round(r.x); p.y = Math.round(r.y);
+        d.style.left = p.x * z + "px"; d.style.top = p.y * z + "px";
+        st.querySelectorAll(".svguide").forEach(e => e.remove());
+        if (r.hx !== null) { const g = document.createElement("div"); g.className = "svguide"; g.style.cssText = `left:${p.x * z}px;top:0;width:1px;height:100%`; st.appendChild(g); }
+        if (r.hy !== null) { const g = document.createElement("div"); g.className = "svguide"; g.style.cssText = `top:${p.y * z}px;left:0;height:1px;width:100%`; st.appendChild(g); }
+      };
+      d.onpointerup = () => { d.onpointermove = null; st.querySelectorAll(".svguide").forEach(e => e.remove()); svPos(p, p.x, p.y); svList(); };
+    };
+    d.onwheel = ev => { ev.preventDefault(); const sc = Math.min(3, Math.max(0.4, p.scale + (ev.deltaY < 0 ? 0.05 : -0.05))); p.scale = Math.round(sc * 100) / 100; d.style.width = p.w * p.scale * z + "px"; svPos(p, p.x, p.y, p.scale); svList(); };
+    st.appendChild(d);
+  });
+  svList(); svPresets();
+}
+function svPresets() {
+  const sel = $("svPreset"), cur = INFO.style || "classic";
+  sel.innerHTML = '<option value="dash">Dash (built-in look)</option><option value="classic">Classic (built-in look)</option>' + (INFO.styles || []).map(x => `<option value="preset:${esc(x.name)}">${esc(x.title)}</option>`).join("");
+  sel.value = cur; if (sel.value !== cur) sel.value = "classic";
+  $("svDel").disabled = !cur.startsWith("preset:");
+}
+function svList() {
+  const L = $("svList");
+  if (!L) return;
+  const keep = L.scrollTop;
+  L.innerHTML = "";
+  SV_GROUPS.forEach(([title, keys]) => {
+    const g = document.createElement("div"); g.className = "grp"; g.textContent = title; L.appendChild(g);
+    keys.forEach(k => {
+      const p = INFO.panels.find(q => q.key === k); if (!p) return;
+      const builtin = ["tag", "battle", "onboard", "dash"].includes(k), isOff = !p.using;
+      const row = document.createElement("div"); row.className = "svrow" + (SV.sel === k ? " sel" : "") + (isOff ? " off" : "");
+      const t = document.createElement("div"); t.className = "t"; t.innerHTML = `<b>${esc(p.label)}</b><span class="hint" style="margin:0">${isOff ? "off" : "on"}</span>`;
+      const sl = document.createElement("select");
+      sl.innerHTML = (builtin ? '<option value="">Automatic (the style\'s own)</option><option value="off">Off</option>' : '<option value="off">Off</option>') + INFO.layouts.map(l => `<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("");
+      const want = p.set || (builtin ? "" : (p.using || "off")); sl.value = want; if (sl.value !== want) sl.value = builtin ? "" : "off";
+      sl.onchange = async () => { try { await call("use", { panel: k, name: sl.value }, ""); SV.sel = k; SV.dirty = true; await svReload(true); svDirtyShow(); } catch (e) { toast(e.message, true); sl.value = p.set; } };
+      const xy = document.createElement("div"); xy.className = "xy";
+      xy.innerHTML = `X <input type="number" value="${p.x}"> Y <input type="number" value="${p.y}"> Size <input type="number" step="0.05" min="0.4" max="3" value="${p.scale}">`;
+      const ins = xy.querySelectorAll("input");
+      ins.forEach(i => i.onchange = () => { svPos(p, +ins[0].value, +ins[1].value, +ins[2].value || p.scale); svRender(); });
+      row.onclick = ev => { if (ev.target.closest("select,input")) return; SV.sel = k; svRender(); };
+      if (!isOff) {                                               // jump to drawing this layout
+        const eb = document.createElement("button"); eb.className = "hb sm"; eb.textContent = "Edit"; eb.title = "Edit " + p.using;
+        eb.onclick = async ev => { ev.stopPropagation(); if (dirty() && !confirm("Leave the layout being edited? Its changes are not saved.")) return; svClose(); await openLayout(p.using); };
+        t.appendChild(eb);
+      }
+      row.append(t, sl); if (!isOff) row.appendChild(xy);
+      L.appendChild(row);
+    });
+  });
+  const h = document.createElement("div"); h.className = "hint"; h.style.marginTop = "14px";
+  h.textContent = "Pick which overlay each slot shows (or Off) and drag it where you want it. A preset keeps all of it: layouts, what is on or off, positions and sizes; picking a preset brings the whole arrangement back. The RaceControl boards stay off until you pick a layout (and set RaceControl's OverlaysDrawnBy to RaceVision). The crash alert / replay banner is not part of this.";
+  L.appendChild(h);
+  L.scrollTop = keep;
+}
+function svDirtyShow() { $("svDirty").style.display = SV.dirty ? "" : "none"; }
+// pick a preset = switch to it (asks first if what is on screen was changed and not saved)
+$("svPreset").onchange = async () => {
+  const v = $("svPreset").value;
+  if (SV.dirty && !confirm("Switch preset? The arrangement on screen was changed and is not saved (use Save or Save as first to keep it).")) { svPresets(); return; }
+  try { await call("styleuse", { name: v.replace(/^preset:/, "") }, ""); SV.dirty = false; await svReload(true); svDirtyShow(); toast("Preset: " + $("svPreset").selectedOptions[0].textContent); }
+  catch (e) { toast(e.message, true); svPresets(); }
 };
-$("bStyleSave").onclick = async () => {
-  const title = (prompt("Name for this style (it appears in the Style box):", "RaceVision My Style") || "").trim();
+async function svSaveAs(slug, title) {
+  try { await call("stylesave", { name: slug, title }, ""); SV.dirty = false; await svReload(false); svDirtyShow(); toast("Saved preset " + title); } catch (e) { toast(e.message, true); }
+}
+$("svSave").onclick = () => {                               // into the preset in use; a built-in look asks for a name
+  const cur = INFO.style || "";
+  if (cur.startsWith("preset:")) { const s = (INFO.styles || []).find(x => x.name === cur.slice(7)); svSaveAs(cur.slice(7), s ? s.title : cur.slice(7)); }
+  else $("svSaveAs").click();
+};
+$("svSaveAs").onclick = () => {
+  const title = (prompt("Name for this preset:", "RaceVision My Screen") || "").trim();
   if (!title) return;
   const slug = title.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
   if (!slug) { toast("Use letters or digits in the name.", true); return; }
-  try { await call("stylesave", { name: slug, title }, ""); INFO = await call(""); fontCss(); renderStyles(); renderPanels(); toast("Saved style " + title); }
-  catch (e) { toast(e.message, true); }
+  svSaveAs(slug, title);
 };
-$("bStyleDel").onclick = async () => {
+$("svDel").onclick = async () => {
   const cur = INFO.style || "";
-  if (!cur.startsWith("preset:") || !confirm("Delete this style? Its layouts stay; the style goes back to Classic.")) return;
-  try { await call("styledelete", { name: cur.slice(7) }, ""); INFO = await call(""); renderStyles(); renderPanels(); toast("Style deleted"); } catch (e) { toast(e.message, true); }
+  if (!cur.startsWith("preset:") || !confirm("Delete this preset? The layouts stay; RaceVision goes back to the Classic look.")) return;
+  try { await call("styledelete", { name: cur.slice(7) }, ""); SV.dirty = false; await svReload(false); svDirtyShow(); toast("Preset deleted"); } catch (e) { toast(e.message, true); }
 };
-function renderPanels() {
-  const P = $("panels");
-  P.innerHTML = "";
-  INFO.panels.forEach(p => {
-    const row = document.createElement("div"); row.className = "panelrow";
-    const sl = document.createElement("select");
-    sl.innerHTML = `<option value="">${p.key.startsWith("custom") ? "(off)" : "Automatic"}</option>` + INFO.layouts.map(l => `<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("");
-    sl.value = p.set;
-    sl.onchange = async () => {
-      try { await call("use", { panel: p.key, name: sl.value }, ""); toast(p.label + ": " + (sl.value || "automatic")); INFO = await call(""); fontCss(); renderPanels(); }
-      catch (e) { toast(e.message, true); sl.value = p.set; }
-    };
-    const b = document.createElement("b"); b.textContent = p.label;
-    row.append(b, sl); P.appendChild(row);
-  });
-}
+$("bToScreen").onclick = $("bScreen").onclick;
 
 // ---------------------------------------------------------------- saving and layouts
 async function save() {
@@ -974,7 +1101,7 @@ $("bNew").onclick = async () => {
   const n = (prompt("Name for the new layout (letters, digits, _ and -):", "my_ticker") || "").trim();
   if (!n) return;
   const doc = { title: n, panel: "custom", w: 600, h: 60, when: "always", elements: [{ type: "rect", name: "Background", x: 0, y: 0, w: 600, h: 60, radius: 8, fill: "#14161ce6" }, { type: "text", name: "Driver", x: 16, y: 14, w: 400, size: 30, text: "{car.full}", upper: true, color: "@white" }] };
-  try { await call("save", { name: n }, JSON.stringify(doc)); await load(n); toast("Created " + n + ". Pick it for a Custom panel under Where layouts show."); } catch (e) { toast(e.message, true); }
+  try { await call("save", { name: n }, JSON.stringify(doc)); await load(n); toast("Created " + n + ". Pick it for a slot on the Screen view."); } catch (e) { toast(e.message, true); }
 };
 $("bDelete").onclick = async () => {
   if (!confirm("Delete the layout " + name + "?")) return;
@@ -999,7 +1126,7 @@ window.addEventListener("keydown", ev => {
   else if (ev.key === "Delete") { if (!mine.length) return; pushUndo(); L.elements = L.elements.filter((_, j) => !mine.includes(j)); sel = -1; sels = new Set(); afterEdit(true); }
 });
 window.addEventListener("beforeunload", ev => { if (L && dirty()) { ev.preventDefault(); ev.returnValue = ""; } });
-load().catch(e => toast(e.message.includes("paired") || e.message.includes("Forbidden") ? "Not paired: open this from RaceVision's Director page (it carries the pairing code)." : e.message, true));
+load().then(() => { if (!qs.get("layout") && INFO && INFO.screenW) svOpen(); }).catch(e => toast(e.message.includes("paired") || e.message.includes("Forbidden") ? "Not paired: open this from RaceVision's Director page (it carries the pairing code)." : e.message, true));
 </script>
 </body>
 </html>

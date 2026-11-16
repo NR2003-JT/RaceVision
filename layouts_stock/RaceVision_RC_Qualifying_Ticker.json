@@ -1,0 +1,332 @@
+{
+    "title":  "RaceVision RC Qualifying Ticker (builds as cars finish; uses the feed\u0027s order list)",
+    "panel":  "custom",
+    "w":  1280,
+    "h":  56,
+    "when":  "rc.tele",
+    "accent":  "car",
+    "elements":  [
+                     {
+                         "name":  "Bar",
+                         "type":  "rect",
+                         "x":  0,
+                         "y":  0,
+                         "w":  1280,
+                         "h":  56,
+                         "fill":  "#0b0d12ee"
+                     },
+                     {
+                         "name":  "Top line",
+                         "type":  "rect",
+                         "x":  0,
+                         "y":  0,
+                         "w":  1280,
+                         "h":  3,
+                         "fill":  "#ffc400"
+                     },
+                     {
+                         "name":  "Plate",
+                         "type":  "rect",
+                         "x":  0,
+                         "y":  0,
+                         "w":  190,
+                         "h":  56,
+                         "fill":  "#ffc400",
+                         "slant":  18
+                     },
+                     {
+                         "name":  "Plate title",
+                         "type":  "text",
+                         "x":  16,
+                         "y":  3,
+                         "w":  160,
+                         "size":  28,
+                         "text":  "QUALIFYING",
+                         "color":  "#14161c",
+                         "bold":  false,
+                         "font":  "Anton"
+                     },
+                     {
+                         "name":  "Plate track",
+                         "type":  "text",
+                         "x":  16,
+                         "y":  34,
+                         "w":  160,
+                         "size":  14,
+                         "text":  "{rc.tele.track}",
+                         "color":  "#3a2a00",
+                         "upper":  true,
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 1",
+                         "x":  204,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.1.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.1.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 1 time",
+                         "type":  "text",
+                         "x":  204,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.1.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 2",
+                         "x":  323,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.2.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.2.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 2 time",
+                         "type":  "text",
+                         "x":  323,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.2.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 3",
+                         "x":  442,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.3.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.3.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 3 time",
+                         "type":  "text",
+                         "x":  442,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.3.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 4",
+                         "x":  561,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.4.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.4.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 4 time",
+                         "type":  "text",
+                         "x":  561,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.4.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 5",
+                         "x":  680,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.5.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.5.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 5 time",
+                         "type":  "text",
+                         "x":  680,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.5.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 6",
+                         "x":  799,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.6.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.6.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 6 time",
+                         "type":  "text",
+                         "x":  799,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.6.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 7",
+                         "x":  918,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.7.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.7.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 7 time",
+                         "type":  "text",
+                         "x":  918,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.7.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 8",
+                         "x":  1037,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.8.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.8.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 8 time",
+                         "type":  "text",
+                         "x":  1037,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.8.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "size":  17,
+                         "w":  116,
+                         "y":  7,
+                         "type":  "run",
+                         "name":  "Entry 9",
+                         "x":  1156,
+                         "parts":  [
+                                       {
+                                           "text":  "{rc.tele.order.9.pos} ",
+                                           "color":  "@gold"
+                                       },
+                                       {
+                                           "text":  "{rc.tele.order.9.last}",
+                                           "color":  "@white"
+                                       }
+                                   ],
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Entry 9 time",
+                         "type":  "text",
+                         "x":  1156,
+                         "y":  30,
+                         "w":  116,
+                         "size":  18,
+                         "text":  "{rc.tele.order.9.time}",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     }
+                 ]
+}

@@ -1,0 +1,181 @@
+{
+    "title":  "RaceVision RC Qualifying Box (RaceControl feed: pole, car on track, delta)",
+    "panel":  "custom",
+    "w":  440,
+    "h":  132,
+    "when":  "rc.qual",
+    "accent":  "car",
+    "elements":  [
+                     {
+                         "name":  "Panel",
+                         "type":  "rect",
+                         "x":  0,
+                         "y":  0,
+                         "w":  440,
+                         "h":  132,
+                         "fill":  "@bg",
+                         "radius":  10
+                     },
+                     {
+                         "name":  "Gold edge",
+                         "type":  "rect",
+                         "x":  0,
+                         "y":  0,
+                         "w":  6,
+                         "h":  132,
+                         "fill":  "@gold"
+                     },
+                     {
+                         "name":  "Header",
+                         "type":  "text",
+                         "x":  20,
+                         "y":  8,
+                         "w":  400,
+                         "size":  15,
+                         "text":  "{rc.qual.header}",
+                         "color":  "@gold",
+                         "font":  "Saira Condensed",
+                         "upper":  true,
+                         "bold":  true
+                     },
+                     {
+                         "name":  "Pole label",
+                         "type":  "text",
+                         "x":  20,
+                         "y":  36,
+                         "w":  50,
+                         "size":  13,
+                         "text":  "POLE",
+                         "color":  "@grey",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "name":  "Pole number",
+                         "type":  "text",
+                         "x":  66,
+                         "y":  32,
+                         "w":  56,
+                         "size":  20,
+                         "text":  "#{rc.qual.pole_num}",
+                         "color":  "@gold",
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Pole name",
+                         "type":  "text",
+                         "x":  126,
+                         "y":  32,
+                         "w":  180,
+                         "size":  20,
+                         "text":  "{rc.qual.pole_name}",
+                         "color":  "@white",
+                         "upper":  true,
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Pole time",
+                         "type":  "text",
+                         "x":  300,
+                         "y":  30,
+                         "w":  124,
+                         "size":  24,
+                         "text":  "{rc.qual.pole_time}",
+                         "color":  "@white",
+                         "align":  "right",
+                         "font":  "Russo One"
+                     },
+                     {
+                         "name":  "Divider",
+                         "type":  "rect",
+                         "x":  20,
+                         "y":  62,
+                         "w":  404,
+                         "h":  1,
+                         "fill":  "#ffffff22"
+                     },
+                     {
+                         "name":  "Car place",
+                         "type":  "text",
+                         "x":  20,
+                         "y":  70,
+                         "w":  46,
+                         "size":  22,
+                         "text":  "P{rc.qual.car_pos}",
+                         "color":  "@white",
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Car number",
+                         "type":  "text",
+                         "x":  66,
+                         "y":  70,
+                         "w":  56,
+                         "size":  22,
+                         "text":  "#{rc.qual.car_num}",
+                         "color":  "@gold",
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Car name",
+                         "type":  "text",
+                         "x":  126,
+                         "y":  70,
+                         "w":  170,
+                         "size":  22,
+                         "text":  "{rc.qual.car_name}",
+                         "color":  "@white",
+                         "upper":  true,
+                         "font":  "Chakra Petch"
+                     },
+                     {
+                         "name":  "Right (faster)",
+                         "type":  "text",
+                         "x":  290,
+                         "y":  64,
+                         "w":  134,
+                         "size":  30,
+                         "text":  "{rc.qual.right}",
+                         "color":  "#5ac828",
+                         "font":  "Russo One",
+                         "align":  "right",
+                         "show":  "rc.qual.faster"
+                     },
+                     {
+                         "name":  "Right (slower)",
+                         "type":  "text",
+                         "x":  290,
+                         "y":  64,
+                         "w":  134,
+                         "size":  30,
+                         "text":  "{rc.qual.right}",
+                         "color":  "#eb4a3c",
+                         "font":  "Russo One",
+                         "align":  "right",
+                         "show":  "!rc.qual.faster"
+                     },
+                     {
+                         "name":  "Projected label",
+                         "type":  "text",
+                         "x":  20,
+                         "y":  106,
+                         "w":  120,
+                         "size":  13,
+                         "text":  "PROJECTED",
+                         "color":  "@grey",
+                         "show":  "rc.qual.projected",
+                         "font":  "Saira Condensed"
+                     },
+                     {
+                         "name":  "Projected",
+                         "type":  "text",
+                         "x":  126,
+                         "y":  102,
+                         "w":  200,
+                         "size":  20,
+                         "text":  "{rc.qual.projected}",
+                         "color":  "@white",
+                         "show":  "rc.qual.projected",
+                         "font":  "Chakra Petch"
+                     }
+                 ]
+}

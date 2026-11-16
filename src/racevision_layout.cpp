@@ -188,7 +188,7 @@ struct Layout {
 static std::map<std::string, Layout> g_lays;
 // style presets (layouts\presets\*.json): a name for a whole look: which look it builds on (dash / classic: when the dash,
 // tag and gauges show) and which layout each panel uses. overlay_style = preset:<name> picks one.
-struct StylePreset { std::string name, title, base; JV layouts; };
+struct StylePreset { std::string name, title, base; JV layouts, screen; };
 static std::map<std::string, StylePreset> g_styles;
 static std::map<std::string, std::string> g_layBad;           // file name -> why it was not loaded
 static bool g_layLoaded = false;
@@ -424,6 +424,7 @@ static void LayLoad() {
 			StylePreset sp;
 			sp.name = name; sp.title = doc.str("title", name); sp.base = doc.str("base", "classic");
 			if (const JV *l = doc.get("layouts")) if (l->t == JV::Obj) sp.layouts = *l;
+			if (const JV *l = doc.get("screen")) if (l->t == JV::Obj) sp.screen = *l;
 			g_styles[name] = sp;
 		} while (FindNextFileA(h, &fd));
 		FindClose(h);
@@ -552,6 +553,8 @@ static const Layout *LayoutFor(const Panel &p) {
 	auto it = S.raw.find("layout_" + key);
 	if (it != S.raw.end()) name = Trim(it->second);
 	if (name.empty()) if (const StylePreset *sp = LayStyleNow()) { const JV *m = sp->layouts.get(key); if (m && m->t == JV::Str) name = m->s; }
+	if (name == "off") return nullptr;                                          // switched off in the screen view
+	if (key.compare(0, 3, "rc_") == 0 && name.empty()) return nullptr;      // RaceControl's boards: off until one is picked
 	if (name.empty()) {
 		bool dash = DashLook();
 		if (key == "tag") name = dash && !OvReplay() ? "tag_dash" : "tag_classic";
@@ -565,6 +568,41 @@ static const Layout *LayoutFor(const Panel &p) {
 }
 static void LayApplySizes() {
 	for (Panel *p : g_panels) if (const Layout *L = LayoutFor(*p)) { p->baseW = (int)L->w; p->baseH = (int)L->h; }
+}
+static void LaySavePos(Panel &p) {                    // (the same ini value Move overlays writes)
+	char v[64];
+	snprintf(v, sizeof v, "%d, %d, %.2f", p.x, p.y, p.scale);
+	SaveKey(std::string("overlay_") + p.key, v);
+}
+// a panel switched off in the screen view (layout "off"): the built-in look is not drawn either
+static bool LayIsOff(const Panel &p) {
+	auto it = S.raw.find(std::string("layout_") + p.key);
+	std::string n = it != S.raw.end() ? Trim(it->second) : "";
+	if (n.empty()) if (const StylePreset *sp = LayStyleNow()) { const JV *m = sp->layouts.get(p.key); if (m && m->t == JV::Str) n = m->s; }
+	return n == "off";
+}
+// choose a style: Dash / Classic change the look only; a preset saved from the screen view also sets which layout each
+// panel uses (or off) and where it sits, so the presets are the mix-and-match unit
+static void LayApplyStyle(const std::string &name) {
+	const StylePreset *sp = nullptr;
+	if (name != "dash" && name != "classic") { auto it = g_styles.find(name); if (it != g_styles.end()) sp = &it->second; }
+	bool screen = sp && sp->screen.t == JV::Obj && !sp->screen.o.empty();
+	if (!screen) LayClearPanelKeys();
+	S.overlayStyle = (name == "dash" || name == "classic") ? name : "preset:" + name;
+	SaveKey("overlay_style", S.overlayStyle);
+	if (screen) {
+		for (Panel *p : g_panels) {
+			if (p == &g_alert) continue;
+			const JV *m = sp->layouts.get(p->key);
+			SaveKey(std::string("layout_") + p->key, m && m->t == JV::Str ? m->s : "");
+			const JV *pos = sp->screen.get(p->key);
+			if (pos && pos->t == JV::Arr && pos->a.size() >= 3) {
+				p->x = (int)pos->a[0].n; p->y = (int)pos->a[1].n; p->scale = (float)std::min(3.0, std::max(0.4, pos->a[2].n));
+				LaySavePos(*p);
+			}
+		}
+	}
+	LayApplySizes();
 }
 
 // ---------------------------------------------------------------- data
@@ -728,6 +766,101 @@ static void LayGap(LCtx &cx) {
 	}
 }
 
+// ---------------------------------------------------------------- RaceControl's overlay feed (rc.qual.*, rc.tele.*, rc.cone.*)
+// RaceControl writes %PROGRAMDATA%\NR2003 Companions\racecontrol\overlay_feed.json (feed_version 1: see "RaceControl overlay
+// feed - reply.md"). It is read about 4 times a second and ignored when written_ms is older than 3 s. Every field is a data
+// source by its path: {rc.qual.pole_time}, {rc.tele.mph}, {rc.tele.order.1.num}, {rc.cone.inside.1.last} (lists count from 1).
+// A layout shows while its group's "show" is true: put "rc.qual", "rc.tele" or "rc.cone" in the layout's "when".
+static const char *RC_SAMPLE =
+	"{\"feed_version\":1,\"session\":\"qualifying\",\"qual\":{\"active\":true,\"show\":true,\"header\":\"ROUND 2  -  4:12\",\"pole_num\":\"54\",\"pole_name\":\"GIBBS\",\"pole_time\":\"26.414\",\"car_num\":\"24\",\"car_name\":\"GORDON\",\"car_pos\":\"3\",\"right\":\"-0.041\",\"right_mode\":2,\"projected\":\"26.402\",\"faster\":true},"
+	"\"tele\":{\"active\":true,\"show\":true,\"track\":\"INDIANAPOLIS\",\"session\":\"QUALIFYING\",\"num\":\"24\",\"first\":\"JEFF\",\"last\":\"GORDON\",\"tele_ok\":true,\"mph\":182,\"rpm\":8275,\"rpm_top\":9000,\"throttle\":0.85,\"brake\":0,\"brake_known\":true,\"gear\":4,\"lap_no\":2,\"laps_total\":3,\"current\":\"13.202\",\"last_lap\":\"26.502\",\"best_lap\":\"26.414\",\"faster\":true,\"show_order\":true,"
+	"\"order\":[{\"pos\":\"1\",\"num\":\"54\",\"first\":\"CHASE\",\"last\":\"GIBBS\",\"time\":\"26.414\",\"kind\":\"f\"},{\"pos\":\"2\",\"num\":\"48\",\"first\":\"JIMMIE\",\"last\":\"JOHNSON\",\"time\":\"26.455\",\"kind\":\"f\"},{\"pos\":\"\",\"num\":\"24\",\"first\":\"JEFF\",\"last\":\"GORDON\",\"time\":\"13.202\",\"kind\":\"l\"}]},"
+	"\"cone\":{\"active\":true,\"show\":true,\"title\":\"DOUBLE FILE - 4 CARS\",\"cars\":4,\"done\":false,\"version\":7,"
+	"\"inside\":[{\"row\":1,\"lane\":1,\"num\":\"24\",\"first\":\"JEFF\",\"last\":\"GORDON\",\"from\":3,\"to\":1,\"gained\":2,\"player\":false},{\"row\":2,\"lane\":1,\"num\":\"01\",\"first\":\"JOHN\",\"last\":\"DOE\",\"from\":4,\"to\":3,\"gained\":1,\"player\":false}],"
+	"\"outside\":[{\"row\":1,\"lane\":2,\"num\":\"48\",\"first\":\"JIMMIE\",\"last\":\"JOHNSON\",\"from\":2,\"to\":2,\"gained\":0,\"player\":false},{\"row\":2,\"lane\":2,\"num\":\"00\",\"first\":\"SAM\",\"last\":\"NOUGHT\",\"from\":1,\"to\":4,\"gained\":0,\"player\":true}]}}";
+
+static std::mutex g_rcLock;
+static JV g_rcFeed, g_rcSample;
+static bool g_rcLive = false, g_rcSampleOk = false;
+static ULONGLONG g_rcPolled = 0;
+static std::string g_rcRaw;
+
+static std::string RcPath() {
+	char pd[MAX_PATH] = "";
+	DWORD n = GetEnvironmentVariableA("PROGRAMDATA", pd, sizeof pd);
+	return std::string(n && n < sizeof pd ? pd : "C:\\ProgramData") + "\\NR2003 Companions\\racecontrol\\overlay_feed.json";
+}
+static void RcRefresh() {                                    // ~4 times a second, from whichever thread draws
+	ULONGLONG t = GetTickCount64();
+	std::lock_guard<std::mutex> lk(g_rcLock);
+	if (g_rcPolled && t - g_rcPolled < 250) return;
+	g_rcPolled = t;
+	std::string raw = ReadAll(RcPath());
+	if (raw.empty()) { g_rcLive = false; return; }
+	if (raw != g_rcRaw) {
+		JV doc;
+		if (JParse(raw, doc) && doc.t == JV::Obj) { g_rcFeed = doc; g_rcRaw = raw; }
+		else return;                                         // half-written or damaged: keep the last good one for now
+	}
+	FILETIME ft; GetSystemTimeAsFileTime(&ft);
+	double nowMs = (((ULONGLONG)ft.dwHighDateTime << 32 | ft.dwLowDateTime) / 10000.0) - 11644473600000.0;
+	double wm = g_rcFeed.num("written_ms", 0);
+	g_rcLive = g_rcFeed.num("feed_version", 0) == 1 && wm > 0 && nowMs - wm <= 3000;
+}
+static const JV *RcWalk(const JV &root, const std::string &path) {
+	const JV *cur = &root;
+	size_t i = 0;
+	while (cur && i <= path.size()) {
+		size_t e = path.find('.', i);
+		std::string seg = path.substr(i, e == std::string::npos ? std::string::npos : e - i);
+		if (seg.empty()) return nullptr;
+		if (cur->t == JV::Obj) cur = cur->get(seg);
+		else if (cur->t == JV::Arr) { int k = atoi(seg.c_str()); cur = k >= 1 && k <= (int)cur->a.size() ? &cur->a[k - 1] : nullptr; }
+		else return nullptr;
+		if (e == std::string::npos) break;
+		i = e + 1;
+	}
+	return cur;
+}
+// path = "qual.pole_time" etc. false = the feed is not there / has no such field (the text stays off)
+static bool LayRc(const std::string &path, bool sample, LV &o) {
+	if (path == "live") { RcRefresh(); std::lock_guard<std::mutex> lk(g_rcLock); LBool(o, sample || g_rcLive); return true; }
+	JV copy;
+	if (sample) {
+		std::lock_guard<std::mutex> lk(g_rcLock);
+		if (!g_rcSampleOk) g_rcSampleOk = JParse(RC_SAMPLE, g_rcSample);
+		copy = g_rcSample;
+	} else {
+		RcRefresh();
+		std::lock_guard<std::mutex> lk(g_rcLock);
+		if (!g_rcLive) return false;
+		copy = g_rcFeed;
+	}
+	if (path == "tele.rpm_frac") {                           // derived: RPM as a share of the dial (0-1), for bars
+		const JV *r = RcWalk(copy, "tele.rpm"), *t = RcWalk(copy, "tele.rpm_top");
+		if (!r || !t || r->t != JV::Num || t->t != JV::Num) { o.unknown = true; return false; }
+		LNum(o, t->n > 0 ? std::min(1.0, std::max(0.0, r->n / t->n)) : 0, "%.3f");
+		return true;
+	}
+	const JV *v = RcWalk(copy, path);
+	if (!v) { o.unknown = true; return false; }
+	switch (v->t) {
+	case JV::Str: LStr(o, v->s); o.n = atof(v->s.c_str()); break;
+	case JV::Num: LNum(o, v->n, v->n == floor(v->n) ? "%.0f" : "%.3f"); break;
+	case JV::Bool: LBool(o, v->b); break;
+	case JV::Arr: LNum(o, (double)v->a.size()); break;      // how many entries
+	default: LStr(o, ""); break;
+	}
+	return true;
+}
+// a "when" word like rc.qual (that group is showing) or rc.tele.show_order (that flag is set)
+static bool LayRcWhen(const std::string &tok) {
+	std::string path = tok.substr(3);
+	if (path.find('.') == std::string::npos && path != "live") path += ".show";
+	LV v;
+	return LayRc(path, false, v) && v.truth;
+}
+
 static bool LayVal(const std::string &name, LCtx &cx, LV &o) {
 	size_t dot = name.find('.');
 	if (dot == std::string::npos) {
@@ -735,6 +868,7 @@ static bool LayVal(const std::string &name, LCtx &cx, LV &o) {
 		o.unknown = true; return false;
 	}
 	std::string a = name.substr(0, dot), f = name.substr(dot + 1);
+	if (a == "rc") return LayRc(f, cx.sample, o);
 	if (LayIsWho(a)) {
 		Drv d = LayWho(cx, a);
 		if (!d.ok) return false;
@@ -1184,6 +1318,7 @@ static bool LayWhen(const Layout &L, bool onboard, bool battleShot) {
 		std::string t = w.substr(i, e - i);
 		i = e;
 		if (t.empty() || t == "always") continue;
+		if (t.rfind("rc.", 0) == 0) { if (!LayRcWhen(t)) return false; continue; }
 		bool ok = t == "race" ? g_session == SESSION_RACE : t == "green" ? g_session == SESSION_RACE && g_flag == FLAG_GREEN
 		        : t == "onboard" ? onboard : t == "offboard" ? !onboard : t == "battle" ? battleShot : t == "replay" ? OvReplay() : true;
 		if (!ok) return false;
@@ -1194,8 +1329,22 @@ static bool LayCustomShow(Panel &p, bool onboard, bool battleShot) {
 	const Layout *L = LayoutFor(p);
 	if (!L) return false;
 	if (g_edit) return true;
-	if (!g_overlaysOn || (!OvReplay() && (g_shot.car < 0 || !g_car[g_shot.car].valid)) ) return false;
+	if (!g_overlaysOn) return false;
+	bool fromRc = L->when.find("rc.") != std::string::npos;      // RaceControl's boards don't need a car on screen
+	if (!fromRc && !OvReplay() && (g_shot.car < 0 || !g_car[g_shot.car].valid)) return false;
 	return LayWhen(*L, onboard, battleShot);
+}
+
+// RaceControl's boards (rc_qual, rc_tele, rc_cone, rc_order): shown while the feed says that group is on screen, whatever
+// the style, whichever car the camera is on. A layout's own "when" (rc.* words, onboard, ...) can narrow it further.
+static bool LayRcShow(Panel &p, bool onboard) {
+	const Layout *L = LayoutFor(p);
+	if (!L) return false;
+	if (g_edit) return true;
+	if (!g_overlaysOn) return false;
+	const char *grp = !strcmp(p.key, "rc_qual") ? "qual" : !strcmp(p.key, "rc_cone") ? "cone" : "tele";
+	if (L->when.find("rc.") == std::string::npos && !LayRcWhen(std::string("rc.") + grp)) return false;
+	return LayWhen(*L, onboard, false);
 }
 
 // ---------------------------------------------------------------- the editor's calls (/api/overlay/...)
@@ -1223,10 +1372,33 @@ static const SrcDef LAY_GLOBALS[] = {
 	{ "battle.place", "Battle place", "num" }, { "battle.gap", "Gap between the two (seconds)", "num" }, { "battle.metres", "Gap between the two (metres)", "num" },
 	{ "replay", "A replay is playing (yes/no)", "bool" },
 	{ "race.lap", "Leader's lap", "num" }, { "race.laps_total", "Race length", "num" }, { "race.laps_to_go", "Laps to go", "num" }, { "race.progress", "Race distance done (0-1)", "num" },
-	{ "race.green", "Green flag (yes/no)", "bool" }, { "race.flag", "Flag", "text" }, { "track.name", "Track", "text" } };
+	{ "race.green", "Green flag (yes/no)", "bool" }, { "race.flag", "Flag", "text" }, { "track.name", "Track", "text" },
+	// RaceControl's feed (see the "when" words rc.qual / rc.tele / rc.cone; lists count from 1)
+	{ "rc.live", "RaceControl feed is running (yes/no)", "bool" }, { "rc.session", "RaceControl: session", "text" },
+	{ "rc.qual.show", "Qual box: showing now (yes/no)", "bool" }, { "rc.qual.header", "Qual box: header", "text" },
+	{ "rc.qual.pole_num", "Qual box: pole car number", "text" }, { "rc.qual.pole_name", "Qual box: pole driver", "text" }, { "rc.qual.pole_time", "Qual box: pole time", "text" },
+	{ "rc.qual.car_num", "Qual box: car number", "text" }, { "rc.qual.car_name", "Qual box: car driver", "text" }, { "rc.qual.car_pos", "Qual box: car position", "text" },
+	{ "rc.qual.right", "Qual box: right-hand value (delta / lap time)", "text" }, { "rc.qual.right_mode", "Qual box: right mode (0 text, 1 lap, 2 delta)", "num" },
+	{ "rc.qual.projected", "Qual box: projected time", "text" }, { "rc.qual.faster", "Qual box: faster than pole (yes/no)", "bool" },
+	{ "rc.tele.show", "Telemetry strip: showing now (yes/no)", "bool" }, { "rc.tele.track", "Telemetry: track", "text" }, { "rc.tele.session", "Telemetry: session", "text" },
+	{ "rc.tele.num", "Telemetry: car number", "text" }, { "rc.tele.first", "Telemetry: first name", "text" }, { "rc.tele.last", "Telemetry: last name", "text" },
+	{ "rc.tele.tele_ok", "Telemetry: data available (yes/no)", "bool" }, { "rc.tele.mph", "Telemetry: mph", "num" }, { "rc.tele.rpm", "Telemetry: RPM", "num" },
+	{ "rc.tele.rpm_top", "Telemetry: RPM at the top of the dial", "num" }, { "rc.tele.throttle", "Telemetry: throttle (0-1)", "num" }, { "rc.tele.brake", "Telemetry: brake (0-1)", "num" },
+	{ "rc.tele.rpm_frac", "Telemetry: RPM share of the dial (0-1)", "num" }, { "rc.tele.gear", "Telemetry: gear", "num" }, { "rc.tele.lap_no", "Telemetry: lap number", "num" }, { "rc.tele.laps_total", "Telemetry: laps in the run", "num" },
+	{ "rc.tele.current", "Telemetry: current lap", "text" }, { "rc.tele.last_lap", "Telemetry: last lap", "text" }, { "rc.tele.best_lap", "Telemetry: best lap", "text" },
+	{ "rc.tele.faster", "Telemetry: ahead of the best (yes/no)", "bool" }, { "rc.tele.show_order", "Telemetry: order slide-in showing (yes/no)", "bool" },
+	{ "rc.tele.order.1.pos", "Order row 1: place", "text" }, { "rc.tele.order.1.num", "Order row 1: number", "text" }, { "rc.tele.order.1.last", "Order row 1: last name", "text" }, { "rc.tele.order.1.time", "Order row 1: time", "text" },
+	{ "rc.tele.order.2.pos", "Order row 2: place", "text" }, { "rc.tele.order.2.num", "Order row 2: number", "text" }, { "rc.tele.order.2.last", "Order row 2: last name", "text" }, { "rc.tele.order.2.time", "Order row 2: time", "text" },
+	{ "rc.tele.order.3.pos", "Order row 3: place", "text" }, { "rc.tele.order.3.num", "Order row 3: number", "text" }, { "rc.tele.order.3.last", "Order row 3: last name", "text" }, { "rc.tele.order.3.time", "Order row 3: time", "text" },
+	{ "rc.cone.show", "Cone board: showing now (yes/no)", "bool" }, { "rc.cone.title", "Cone board: title", "text" }, { "rc.cone.cars", "Cone board: cars", "num" },
+	{ "rc.cone.inside.1.num", "Cone inside row 1: number", "text" }, { "rc.cone.inside.1.last", "Cone inside row 1: last name", "text" }, { "rc.cone.inside.1.to", "Cone inside row 1: new place", "num" },
+	{ "rc.cone.inside.2.num", "Cone inside row 2: number", "text" }, { "rc.cone.inside.2.last", "Cone inside row 2: last name", "text" }, { "rc.cone.inside.2.to", "Cone inside row 2: new place", "num" },
+	{ "rc.cone.outside.1.num", "Cone outside row 1: number", "text" }, { "rc.cone.outside.1.last", "Cone outside row 1: last name", "text" }, { "rc.cone.outside.1.to", "Cone outside row 1: new place", "num" },
+	{ "rc.cone.outside.2.num", "Cone outside row 2: number", "text" }, { "rc.cone.outside.2.last", "Cone outside row 2: last name", "text" }, { "rc.cone.outside.2.to", "Cone outside row 2: new place", "num" } };
 
 static const char *LAY_PANELS[][2] = { { "tag", "Driver tag" }, { "battle", "Battle box" }, { "onboard", "On-board gauges" }, { "dash", "In-car dash" },
-                                        { "custom1", "Custom 1" }, { "custom2", "Custom 2" }, { "custom3", "Custom 3" }, { "custom4", "Custom 4" } };
+                                        { "custom1", "Custom 1" }, { "custom2", "Custom 2" }, { "custom3", "Custom 3" }, { "custom4", "Custom 4" },
+                                        { "rc_qual", "Qualifying timing box" }, { "rc_tele", "Telemetry strip" }, { "rc_cone", "Cone board" }, { "rc_order", "Qualifying order ticker" } };
 
 static std::string LayPng(Bitmap &bmp) {
 	UINT n = 0, size = 0;
@@ -1350,9 +1522,12 @@ static std::string LayApi(const std::string &sub, std::map<std::string, std::str
 			o.set("key", JV::Str_(pn[0])); o.set("label", JV::Str_(pn[1]));
 			o.set("set", JV::Str_(it == S.raw.end() ? "" : Trim(it->second)));
 			o.set("using", JV::Str_(L ? L->name : ""));
+			o.set("x", JV::Num_(p->x)); o.set("y", JV::Num_(p->y)); o.set("scale", JV::Num_(p->scale));
+			o.set("w", JV::Num_(L ? L->w : p->baseW)); o.set("h", JV::Num_(L ? L->h : p->baseH));
 			ps.a.push_back(o);
 		}
 		r.set("panels", ps);
+		r.set("screenW", JV::Num_(GetSystemMetrics(SM_CXSCREEN))); r.set("screenH", JV::Num_(GetSystemMetrics(SM_CYSCREEN)));
 		JV src = JV::Obj_(), cf = JV::Arr_(), gl = JV::Arr_();
 		for (auto &d : LAY_CAR_FIELDS) { JV o = JV::Obj_(); o.set("key", JV::Str_(d.key)); o.set("label", JV::Str_(d.label)); o.set("kind", JV::Str_(d.kind)); cf.a.push_back(o); }
 		for (auto &d : LAY_GLOBALS) { JV o = JV::Obj_(); o.set("key", JV::Str_(d.key)); o.set("label", JV::Str_(d.label)); o.set("kind", JV::Str_(d.kind)); gl.a.push_back(o); }
@@ -1447,29 +1622,62 @@ static std::string LayApi(const std::string &sub, std::map<std::string, std::str
 			JV doc = JV::Obj_(), map = JV::Obj_();
 			doc.set("title", JV::Str_(title));
 			doc.set("base", JV::Str_(q["base"] == "classic" ? "classic" : q["base"] == "dash" ? "dash" : DashLook() ? "dash" : "classic"));
+			JV scr = JV::Obj_();                                   // the whole screen: which layout each panel uses (or off) and where it sits
 			for (auto &pn : LAY_PANELS) {
 				Panel *p = nullptr;
 				for (Panel *q2 : g_panels) if (!strcmp(q2->key, pn[0])) p = q2;
-				const Layout *L = p ? LayoutFor(*p) : nullptr;
-				if (L) map.set(pn[0], JV::Str_(L->name));
+				if (!p) continue;
+				const Layout *L = LayoutFor(*p);
+				map.set(pn[0], JV::Str_(L ? L->name : "off"));
+				JV pos = JV::Arr_(); pos.a.push_back(JV::Num_(p->x)); pos.a.push_back(JV::Num_(p->y)); pos.a.push_back(JV::Num_(p->scale));
+				scr.set(pn[0], pos);
 			}
 			doc.set("layouts", map);
+			doc.set("screen", scr);
 			LayMkdir(LayDir() + "\\presets");
 			if (!LayWriteFile(LayDir() + "\\presets\\" + name + ".json", JText(doc))) { code = 400; out = LayErr("Could not write the style."); }
 			else {
 				LayLoad();
-				LayClearPanelKeys();
-				S.overlayStyle = "preset:" + name; SaveKey("overlay_style", S.overlayStyle); LayApplySizes();
+				LayApplyStyle(name);
 				out = "{\"ok\":true}";
 			}
 		}
 	} else if (sub == "styleuse") {
 		if (name != "dash" && name != "classic" && !g_styles.count(name)) { code = 404; out = LayErr("No such style."); }
 		else {
-			LayClearPanelKeys();
-			S.overlayStyle = (name == "dash" || name == "classic") ? name : "preset:" + name;
-			SaveKey("overlay_style", S.overlayStyle); LayApplySizes();
+			LayApplyStyle(name);
 			out = "{\"ok\":true}";
+		}
+	} else if (sub == "panelpos") {                                   // the screen view: where a panel sits and how big (kept in the ini like Move overlays does)
+		Panel *p = nullptr;
+		for (Panel *q2 : g_panels) if (q["panel"] == q2->key) p = q2;
+		if (!p || (p == &g_alert)) { code = 400; out = LayErr("No such panel."); }
+		else {
+			if (!q["x"].empty()) p->x = atoi(q["x"].c_str());
+			if (!q["y"].empty()) p->y = atoi(q["y"].c_str());
+			if (!q["scale"].empty()) p->scale = (float)std::min(3.0, std::max(0.4, atof(q["scale"].c_str())));
+			LaySavePos(*p);
+			out = "{\"ok\":true}";
+		}
+	} else if (sub == "panelpng") {                                   // one panel as it would look (sample data), for the screen view
+		Panel *p = nullptr;
+		for (Panel *q2 : g_panels) if (q["panel"] == q2->key) p = q2;
+		const Layout *L = p ? LayoutFor(*p) : nullptr;
+		if (!L) { code = 404; out = LayErr("That panel is off."); }
+		else {
+			LCtx cx; cx.sample = true;
+			if (L->panel == "battle") cx.battle = true;
+			Bitmap bmp((INT)L->w, (INT)L->h, PixelFormat32bppARGB);
+			{
+				Graphics gr(&bmp);
+				gr.SetSmoothingMode(SmoothingModeAntiAlias);
+				gr.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+				gr.Clear(C(0, 0, 0, 0));
+				LayDraw(gr, *L, cx);
+			}
+			out = LayPng(bmp);
+			ctype = "image/png";
+			if (out.empty()) { code = 400; ctype = "application/json; charset=utf-8"; out = LayErr("Could not draw that."); }
 		}
 	} else if (sub == "styledelete") {
 		if (!g_styles.count(name)) { code = 404; out = LayErr("No such style."); }
@@ -1483,8 +1691,9 @@ static std::string LayApi(const std::string &sub, std::map<std::string, std::str
 		bool known = false;
 		for (auto &pn : LAY_PANELS) if (panel == pn[0]) known = true;
 		if (!known) { code = 400; out = LayErr("No such panel."); }
-		else if (!name.empty() && !g_lays.count(name)) { code = 404; out = LayErr("No such layout."); }
-		else { SaveKey("layout_" + panel, name); LayApplySizes(); out = "{\"ok\":true}"; }
+		else if (!name.empty() && name != "off" && !g_lays.count(name)) { code = 404; out = LayErr("No such layout."); }
+		else { if (name.empty() && (!strncmp(panel.c_str(), "custom", 6) || !strncmp(panel.c_str(), "rc_", 3))) name = "off";      // (empty would hand the slot back to the active preset)
+			SaveKey("layout_" + panel, name); LayApplySizes(); out = "{\"ok\":true}"; }
 	} else if (sub == "render") {
 		JV doc;
 		if (!JParse(body, doc) || doc.t != JV::Obj) { code = 400; out = LayErr("That layout is not valid JSON."); }
