@@ -90,7 +90,7 @@ of elements.
   for each slot). Picking one in the Screen view, or in the window's Style box, applies it. Dash and Classic stay as the two
   built-in looks and only change the look, not positions. A preset without `screen` (the three shipped ones) only sets layouts.
 - Overlay pack: `layouts_stock\` (the RaceVision_* layouts, alternates, their art and three style presets) and `fontpack\` ship beside
-  the exe; RaceVision copies what your layouts folder lacks into it once. `RaceVision_Overlay_Pack.zip` is that pack on its own.
+  the exe; RaceVision copies what your layouts folder lacks into it once.
 - Groups and locks: in the editor, Shift-click selects several elements; Group (Ctrl+G) makes them move together, Lock (Ctrl+L) pins
   them in place.
 - Where they show: the Screen view (ini keys `layout_tag`, `layout_battle`, `layout_onboard`, `layout_dash`,
@@ -117,4 +117,4 @@ live races and by testers.
 
 ## License
 
-Source-available, see [LICENSE](LICENSE). You can read the source, build it, and fork it on GitHub. Tools that read and write RaceVision's settings, presets and setups are welcome. Please don't redistribute builds or ported copies of the code; point people to the official download instead.
+MIT, see [LICENSE](LICENSE). Free to use, copy, modify and share, with the copyright notice kept.
